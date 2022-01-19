@@ -18,7 +18,12 @@ module Expressions
 , timesExpr
 , divExpr
 , modExpr
---
+, eqCond
+, neqCond
+, leCond
+, geCond
+, leqCond
+, geqCond
 ) where
 
 import Code
@@ -148,4 +153,26 @@ modExpr valL valR = cmdsMod (loadVal valL) (loadVal valR)
 
 -- warunki
 
--- TODO
+-- oblicza roznice podanych zmiennych, ktora potem bedzie potraktowana w zaleznosci od rodzaju warunku
+generalCond :: Value -> Value -> (Code, Int)
+generalCond = minusExpr
+
+-- funkcje dla odpowiednich warunkow
+
+eqCond :: Value -> Value -> ((Code, Int), CondType)
+eqCond v1 v2 = (generalCond v1 v2, CondEq)
+
+neqCond :: Value -> Value -> ((Code, Int), CondType)
+neqCond v1 v2 = (generalCond v1 v2, CondNEq)
+
+leCond :: Value -> Value -> ((Code, Int), CondType)
+leCond v1 v2 = (generalCond v1 v2, CondLe)
+
+geCond :: Value -> Value -> ((Code, Int), CondType)
+geCond v1 v2 = (generalCond v1 v2, CondGe)
+
+leqCond :: Value -> Value -> ((Code, Int), CondType)
+leqCond v1 v2 = (generalCond v1 v2, CondLEq)
+
+geqCond :: Value -> Value -> ((Code, Int), CondType)
+geqCond v1 v2 = (generalCond v1 v2, CondGEq)

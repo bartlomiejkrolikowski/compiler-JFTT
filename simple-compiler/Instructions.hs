@@ -53,8 +53,8 @@ assignArr dest (prog, len) = let cmds = reverse cmdsEnd ++ computeNumber dest (r
 assign :: Identifier -> (Code, Int) -> (Code, Int)
 assign = matchingAssign
     where -- matchingAssign (Var (Iterator _ _ _)) _ = error "assigning to constant" -- niepotrzebne, bo sprawdzam juz w parserze, a tak moge zainicjowac iterator w for przez assign
-          matchingAssign (ArrNum arr ind) cmdsExp = assignArr (address arr) (joinCmds (computeIndex ind) cmdsExp)
-          matchingAssign (ArrVar arr ind) cmdsExp = assignArr (address arr) (joinCmds (getVarIndex ind) cmdsExp)
+          matchingAssign (ArrNum arr ind) cmdsExp = assignVar (address arr + ind) cmdsExp -- licze od razu docelowy adres i traktuje jak zwykla zmienna
+          matchingAssign (ArrVar arr ind) cmdsExp = assignArr (address arr) $ joinCmds (getVarIndex ind) cmdsExp
           matchingAssign (Var sing) cmdsExp = assignVar (address sing) cmdsExp
           computeIndex i = let cmds = reverse restoreRa ++ computeNumber i (reverse saveRa) in (cmds, length cmds)
           getVarIndex i = let cmds = reverse restoreRa ++ reverse (loadIndex . address $ i) ++ reverse saveRa in (cmds, length cmds)
