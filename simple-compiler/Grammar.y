@@ -108,8 +108,8 @@ command :: { Variables -> Int -> (Command, Variables) }
                                                                          let (cmdsW, varsW) = $4 vars unusedAddr -- po przejsciu przez while napewno nie bedzie mniej zainicjowanych
                                                                          in  (While ($2 vars) cmdsW, varsW) }
       | REPEAT commands UNTIL condition ';'                        { \vars unusedAddr ->
-                                                                         let (cmdsR, varsR) = $2 vars unusedAddr -- po przejsciu przez repeat napewno nie bedzie mniej zainicjowanych
-                                                                         in  (Repeat cmdsR ($4 vars), varsR) }
+                                                                         let (cmdsR, varsR) = $2 vars unusedAddr -- po przejsciu przez repeat napewno nie bedzie mniej zainicjowanych + w warunku sa juz zainicjowane
+                                                                         in  (Repeat cmdsR ($4 varsR), varsR) }
       | FOR pidentifier FROM value TO value DO commands ENDFOR     { \vars unusedAddr ->
                                                                          case Map.lookup $2 vars of
                                                                              Nothing -> let localVars = Map.insert $2 (Iterator $2 True unusedAddr) vars

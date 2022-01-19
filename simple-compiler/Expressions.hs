@@ -32,6 +32,8 @@ import GrammarTree
 -- wyrazenia zwracaja komendy (+ ich liczba) zwracajace wartosc w Ra
 -- warunki zwracaja dodatkowo rodzaj warunku (jako CondType)
 
+-- pobierane i zwracane komendy sa w docelowej kolejnosci (czyli odwrocone)
+
 -- obliczenie stalej wartosci do Ra (zajmuje Ra i Rb) (tylko: n > 0 -- znak w wasPositive)
 computeAbsNumber :: Bool -> Int -> Code -> Code
 computeAbsNumber _ 0 prog = (reverse initialCommands) ++ prog
@@ -80,16 +82,16 @@ appendLength x = (x, length x)
 loadVal :: Value -> Code
 loadVal = matchingLoadVal
     where matchingLoadVal (Number n) = computeNumber n []
-          matchingLoadVal (Identifier (Var var)) = reverse cmdsLoad ++ computeNumber (address var) []
-          matchingLoadVal (Identifier (ArrNum arr ind)) = reverse cmdsLoadIndexed ++ computeNumber (address arr + ind) []
+          matchingLoadVal (Identifier (Var var)) = cmdsLoadAddr $ address var
+          matchingLoadVal (Identifier (ArrNum arr ind)) = cmdsLoadAddr $ address arr + ind
           matchingLoadVal (Identifier (ArrVar arr ind)) =
-              reverse cmdsLoadIndexed ++ reverse (cmdsLoadIndex $ address ind) ++ reverse cmdsSaveArrOffset ++ computeNumber (address arr) []
-          cmdsLoad = [ Load Ra ] -- laduje wartoc spod adresu w Ra do Ra
+              reverse cmdsLoadIndexed ++ (cmdsLoadAddr $ address ind) ++ reverse cmdsSaveArrOffset ++ computeNumber (address arr) []
+          -- cmdsLoad = [ Load Ra ] -- laduje wartoc spod adresu w Ra do Ra
           cmdsLoadIndexed = [ Add Rc -- podstawa tablicy jest w Rc, indeks w Ra
                             , Load Ra -- po dodaniu otrzymuje ostateczny adres
                             ]
           cmdsSaveArrOffset = [ Swap Rc ] -- zachowuje obliczona podstawe tablicy w Rc
-          cmdsLoadIndex addr = computeNumber addr [] ++ cmdsLoad -- liczy adres zmiennej do Ra i laduje stamtad wartosc do Ra
+          cmdsLoadAddr addr = loadValFrom $ computeNumber addr [] -- liczy adres zmiennej do Ra i laduje stamtad wartosc do Ra
 
 -- zachowuje pobrana wartosc w Rd (na potrzeby pobrania kolajnej wartosci)
 codeSaveVal :: Code
@@ -118,7 +120,7 @@ cmdsSub codeA codeD = appendLength $ codeBinExpr codeSubRegs codeA codeD
 
 -- kompiluje odejmowanie dwoch wartosci, wynik zapisuje do Ra
 minusExpr :: Value -> Value -> (Code, Int)
-minusExpr valL valR = cmdsAdd (loadVal valL) (loadVal valR)
+minusExpr valL valR = cmdsSub (loadVal valL) (loadVal valR)
 
 -- mnozy dwie wartosci obliczone odpowiednio w Ra i Rd przez podane komendy
 cmdsMult :: Code -> Code -> (Code, Int)
@@ -127,7 +129,7 @@ cmdsMult codeA codeD = appendLength $ codeBinExpr codeMultRegs codeA codeD
 
 -- kompiluje dodawanie dwoch wartosci, wynik zapisuje do Ra
 timesExpr :: Value -> Value -> (Code, Int)
-timesExpr valL valR = cmdsAdd (loadVal valL) (loadVal valR)
+timesExpr valL valR = cmdsMult (loadVal valL) (loadVal valR)
 
 -- oblicza div i mod dwoch wartosci obliczonych odpowiednio w Ra i Rd przez podane komendy
 cmdsDivMod :: Code -> Code -> (Code, Int)
@@ -147,7 +149,7 @@ cmdsMod codeA codeD = joinCmds cmdsGetMod $ cmdsDivMod codeA codeD
 divExpr :: Value -> Value -> (Code, Int)
 divExpr valL valR = cmdsDiv (loadVal valL) (loadVal valR)
 
--- kompiluje div dwoch wartosci, wynik zapisuje do Ra
+-- kompiluje mod dwoch wartosci, wynik zapisuje do Ra
 modExpr :: Value -> Value -> (Code, Int)
 modExpr valL valR = cmdsMod (loadVal valL) (loadVal valR)
 

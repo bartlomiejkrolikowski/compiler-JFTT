@@ -83,8 +83,8 @@ assign = matchingAssign
           matchingAssign (ArrNum arr ind) cmdsExp = assignVar (address arr + ind) cmdsExp -- licze od razu docelowy adres i traktuje jak zwykla zmienna
           matchingAssign (ArrVar arr ind) cmdsExp = assignArr (address arr) $ joinCmds (getVarIndex ind) cmdsExp
           matchingAssign (Var sing) cmdsExp = assignVar (address sing) cmdsExp
-          computeIndex i = let cmds = reverse restoreRa ++ computeNumber i (reverse saveRa) in (cmds, length cmds)
-          getVarIndex i = let cmds = reverse restoreRa ++ reverse (loadIndex . address $ i) ++ reverse saveRa in (cmds, length cmds)
+          -- computeIndex i = appendLength $ reverse restoreRa ++ computeNumber i (reverse saveRa)
+          getVarIndex i = appendLength $ reverse restoreRa ++ (loadIndex . address $ i) ++ reverse saveRa
           saveRa = [ Swap Rh ] -- zachowuje obliczona wartosc
           loadIndex addr = [ Load Ra ] ++ computeNumber addr [] -- licze adres zmiennej, a na koncu pobieram stamtad wartosc indeksu
           restoreRa = [ Swap Rb -- zachowuje znaleziony indeks do Rb
@@ -181,14 +181,13 @@ forLoop iter rngAddr dir cmdsBeginRng cmdsEndRng cmdsLoop = generalLoop (iterCon
           iterCondition Down = CondGEq
           computeRngAddr = computeNumber rngAddr
           cmdsIterInit = assign iter cmdsBeginRng
-          cmdsEndInit (codeEndRng, lenEndRng) = let codeEndInit = storeValIn codeEndRng (computeNumber rngAddr [])
-                                                in  (codeEndInit, length codeEndRng)
+          cmdsEndInit (codeEndRng, lenEndRng) = appendLength $ storeValIn codeEndRng $ computeNumber rngAddr []
           cmdsIntro = joinCmds (cmdsEndInit cmdsEndRng) cmdsIterInit
           cmdsCond = codeCmp (address $ decl iter) rngAddr
           cmdsIterMove Up = iterIncrement
           cmdsIterMove Down = iterDecrement
-          iterIncrement = assign iter (appendLength $ [ Inc Ra ] ++ (loadVal $ Identifier iter))
-          iterDecrement = assign iter (appendLength $ [ Dec Ra ] ++ (loadVal $ Identifier iter))
+          iterIncrement = assign iter $ appendLength $ [ Inc Ra ] ++ (loadVal $ Identifier iter)
+          iterDecrement = assign iter $ appendLength $ [ Dec Ra ] ++ (loadVal $ Identifier iter)
 
 -- kompiluje instrukcje for-to
 -- pobiera informacje o deklarowanym iteratorze, komendy obliczajace poczatek zakresu, komendy obliczajace koniec zakresu

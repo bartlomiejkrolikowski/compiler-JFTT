@@ -862,8 +862,8 @@ happyReduction_13 (_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn7
 		 (\vars unusedAddr ->
-                                                                         let (cmdsR, varsR) = happy_var_2 vars unusedAddr -- po przejsciu przez repeat napewno nie bedzie mniej zainicjowanych
-                                                                         in  (Repeat cmdsR (happy_var_4 vars), varsR)
+                                                                         let (cmdsR, varsR) = happy_var_2 vars unusedAddr -- po przejsciu przez repeat napewno nie bedzie mniej zainicjowanych + w warunku sa juz zainicjowane
+                                                                         in  (Repeat cmdsR (happy_var_4 varsR), varsR)
 	) `HappyStk` happyRest
 
 happyReduce_14 = happyReduce 9 7 happyReduction_14
