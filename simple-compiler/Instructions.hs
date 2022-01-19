@@ -10,7 +10,34 @@ module Instructions
 , repeatLoop
 , forToLoop
 , forDownToLoop
+, readAndStore
+, writeVal
+-- pobrane z Expressions
 , computeNumber
+, storeValIn
+, loadValFrom
+, joinCmds
+, appendLength
+, loadVal
+, codeSaveVal
+, codeBinExpr
+, cmdsAdd
+, cmdsSub
+, cmdsMult
+, cmdsDivMod
+, cmdsDiv
+, cmdsMod
+, plusExpr
+, minusExpr
+, timesExpr
+, divExpr
+, modExpr
+, eqCond
+, neqCond
+, leCond
+, geCond
+, leqCond
+, geqCond
 ) where
 
 import GrammarTree
@@ -155,7 +182,7 @@ forLoop iter rngAddr dir cmdsBeginRng cmdsEndRng cmdsLoop = generalLoop (iterCon
           computeRngAddr = computeNumber rngAddr
           cmdsIterInit = assign iter cmdsBeginRng
           cmdsEndInit (codeEndRng, lenEndRng) = let codeEndInit = storeValIn codeEndRng (computeNumber rngAddr [])
-                                                in  (codeEndRng, length codeEndRng)
+                                                in  (codeEndInit, length codeEndRng)
           cmdsIntro = joinCmds (cmdsEndInit cmdsEndRng) cmdsIterInit
           cmdsCond = codeCmp (address $ decl iter) rngAddr
           cmdsIterMove Up = iterIncrement
@@ -167,13 +194,13 @@ forLoop iter rngAddr dir cmdsBeginRng cmdsEndRng cmdsLoop = generalLoop (iterCon
 -- pobiera informacje o deklarowanym iteratorze, komendy obliczajace poczatek zakresu, komendy obliczajace koniec zakresu
 --    i komendy do wykonania wewnatrz petli (+ licznik)
 forToLoop :: Identifier -> (Code, Int) -> (Code, Int) -> (Code, Int) -> (Code, Int)
-forToLoop iter cmdsBeginRng cmdsEndRng cmdsLoop = forLoop iter (address $ decl iter) Up cmdsBeginRng cmdsEndRng cmdsLoop
+forToLoop iter cmdsBeginRng cmdsEndRng cmdsLoop = forLoop iter ((address $ decl iter) + 1) Up cmdsBeginRng cmdsEndRng cmdsLoop
 
 -- kompiluje instrukcje for-downto
 -- pobiera informacje o deklarowanym iteratorze, komendy obliczajace poczatek zakresu, komendy obliczajace koniec zakresu
 --    i komendy do wykonania wewnatrz petli (+ licznik)
 forDownToLoop :: Identifier -> (Code, Int) -> (Code, Int) -> (Code, Int) -> (Code, Int)
-forDownToLoop iter cmdsBeginRng cmdsEndRng cmdsLoop = forLoop iter (address $ decl iter) Down cmdsBeginRng cmdsEndRng cmdsLoop
+forDownToLoop iter cmdsBeginRng cmdsEndRng cmdsLoop = forLoop iter ((address $ decl iter) + 1) Down cmdsBeginRng cmdsEndRng cmdsLoop
 
 -- kompiluje instrukcje read (uwaga: funkcja ma inna nazwe, bo read juz istnieje)
 --    pobiera identyfikator, do ktorego nalezy czytac

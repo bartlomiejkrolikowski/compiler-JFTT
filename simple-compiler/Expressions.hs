@@ -43,7 +43,7 @@ computeAbsNumber wasPositive n prog = let cmds = if n `mod` 2 == 0
                                                    then evenCommands
                                                    else oddCommands
                                       in  reverse cmds ++ computeAbsNumber wasPositive (n `div` 2) prog
-    where oddCommands = [ Shift Rb        -- w Ra jest (n `div` 2) -- b==1
+    where oddCommands = [ Shift Rb         -- w Ra jest (n `div` 2) -- b==1
                         , incrementCommand -- n jest nieparzyste (+1 lub -1 w zaleznosci od rzeczywistego znaku n)
                         ]
           evenCommands = [ Shift Rb ] -- w Ra jest (n `div` 2) -- b==1
@@ -56,7 +56,7 @@ computeNumber n prog = computeAbsNumber (n > 0) (abs n) prog
 -- zapis wartosci obliczanej podanymi komendami do adresu obliczanego komendami podanymi na 2 miejscu
 --    (wszystkie obliczenia zwracaja wynik w Ra) (rejestry nie moga byc aktualnie uzywane)
 storeValIn :: Code -> Code -> Code
-storeValIn cmdsVal cmdsAddr = reverse restoreAndSaveResult ++ cmdsAddr ++ reverse saveTmpResult ++ reverse cmdsVal
+storeValIn cmdsVal cmdsAddr = reverse restoreAndSaveResult ++ cmdsAddr ++ reverse saveTmpResult ++ cmdsVal
     where saveTmpResult = [ Swap Rh ] -- w Ra jest wynik, zachowuje go w Rh
           restoreAndSaveResult = [ Swap Rh -- w Ra jest adres, w Rh wynik
                                  , Store Rh
