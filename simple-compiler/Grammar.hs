@@ -5,10 +5,8 @@ module Grammar
 
 import Tokens
 import GrammarTree
+import Instructions
 import qualified Data.Map as Map
--- import Data.Map((!?))
-
--- Declarations = Map.Map String Declaration
 import qualified Data.Array as Happy_Data_Array
 import qualified Data.Bits as Bits
 import Control.Applicative(Applicative(..))
@@ -20,13 +18,13 @@ data HappyAbsSyn
 	= HappyTerminal (Token)
 	| HappyErrorToken Int
 	| HappyAbsSyn4 (Program)
-	| HappyAbsSyn5 (Map.Map String Declaration)
-	| HappyAbsSyn6 (Declarations -> [Command])
-	| HappyAbsSyn7 (Declarations -> Command)
-	| HappyAbsSyn8 (Declarations -> Expression)
-	| HappyAbsSyn9 (Declarations -> Condition)
-	| HappyAbsSyn10 (Declarations -> Value)
-	| HappyAbsSyn11 (Declarations -> Identifier)
+	| HappyAbsSyn5 ((Map.Map String Variable, Int))
+	| HappyAbsSyn6 (Variables -> Int -> ([Command], Variables))
+	| HappyAbsSyn7 (Variables -> Int -> (Command, Variables))
+	| HappyAbsSyn8 (Variables -> Expression)
+	| HappyAbsSyn9 (Variables -> Condition)
+	| HappyAbsSyn10 (Variables -> Value)
+	| HappyAbsSyn11 (Variables -> Identifier)
 
 {- to allow type-synonyms as our monads (likely
  - with explicitly-specified bind and return)
@@ -708,7 +706,7 @@ happyReduction_1 (_ `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn4
-		 (let vars = happy_var_2 in Program vars (happy_var_4 vars)
+		 (let vars = happy_var_2 in Program vars (happy_var_4 (fst vars) (snd vars))
 	) `HappyStk` happyRest
 
 happyReduce_2 = happySpecReduce_3  4 happyReduction_2
@@ -716,7 +714,7 @@ happyReduction_2 _
 	(HappyAbsSyn6  happy_var_2)
 	_
 	 =  HappyAbsSyn4
-		 (let vars = Map.empty in Program vars (happy_var_2 vars)
+		 (let vars = (Map.empty, 0) in Program vars (happy_var_2 (fst vars) (snd vars))
 	)
 happyReduction_2 _ _ _  = notHappyAtAll 
 
@@ -725,9 +723,10 @@ happyReduction_3 (HappyTerminal (Pidentifier happy_var_3))
 	_
 	(HappyAbsSyn5  happy_var_1)
 	 =  HappyAbsSyn5
-		 (if Map.member happy_var_3 happy_var_1
-                                                             then error ("redeclaration of a variable: " ++ happy_var_3)
-                                                             else Map.insert happy_var_3 (Variable happy_var_3) happy_var_1
+		 (let (decls, lowestUnusedAddress) = happy_var_1
+                                                           in  if Map.member happy_var_3 decls
+                                                                 then error ("redeclaration of a variable: " ++ happy_var_3)
+                                                                 else (Map.insert happy_var_3 (SingleVar happy_var_3 False lowestUnusedAddress) decls, lowestUnusedAddress+1)
 	)
 happyReduction_3 _ _ _  = notHappyAtAll 
 
@@ -742,17 +741,20 @@ happyReduction_4 (_ `HappyStk`
 	(HappyAbsSyn5  happy_var_1) `HappyStk`
 	happyRest)
 	 = HappyAbsSyn5
-		 (if happy_var_5 > happy_var_7
-                                                             then error ("arrays of 0 length are not allowed: " ++ happy_var_3 ++ "[" ++ show happy_var_5 ++ ":" ++ show happy_var_7 ++ "]")
-                                                             else if Map.member happy_var_3 happy_var_1
-                                                                    then error ("redeclaration of a variable: " ++ happy_var_3)
-                                                                    else Map.insert happy_var_3 (Array happy_var_3 happy_var_5 happy_var_7) happy_var_1
+		 (let (decls, lowestUnusedAddress) = happy_var_1
+                                                               ; index0Address = lowestUnusedAddress - happy_var_5
+                                                               ; arrayLength = happy_var_7 - happy_var_5 + 1
+                                                           in  if happy_var_5 > happy_var_7
+                                                                 then error ("arrays of non-positive length are not allowed: " ++ happy_var_3 ++ "[" ++ show happy_var_5 ++ ":" ++ show happy_var_7 ++ "]")
+                                                                 else if Map.member happy_var_3 decls
+                                                                        then error ("redeclaration of a variable: " ++ happy_var_3)
+                                                                        else (Map.insert happy_var_3 (Array happy_var_3 happy_var_5 happy_var_7 False index0Address) decls, lowestUnusedAddress + arrayLength)
 	) `HappyStk` happyRest
 
 happyReduce_5 = happySpecReduce_1  5 happyReduction_5
 happyReduction_5 (HappyTerminal (Pidentifier happy_var_1))
 	 =  HappyAbsSyn5
-		 (Map.singleton happy_var_1 (Variable happy_var_1)
+		 ((Map.singleton happy_var_1 (SingleVar happy_var_1 False 0), 1)
 	)
 happyReduction_5 _  = notHappyAtAll 
 
@@ -765,23 +767,30 @@ happyReduction_6 (_ `HappyStk`
 	(HappyTerminal (Pidentifier happy_var_1)) `HappyStk`
 	happyRest)
 	 = HappyAbsSyn5
-		 (if happy_var_3 > happy_var_5
-                                                             then error ("arrays of 0 length are not allowed: " ++ happy_var_1 ++ "[" ++ show happy_var_3 ++ ":" ++ show happy_var_5 ++ "]")
-                                                             else Map.singleton happy_var_1 (Array happy_var_1 happy_var_3 happy_var_5)
+		 (let index0Address = - happy_var_3
+                                                               ; arrayLength = happy_var_5 - happy_var_3 + 1
+                                                           in  if happy_var_3 > happy_var_5
+                                                                 then error ("arrays of non-positive length are not allowed: " ++ happy_var_1 ++ "[" ++ show happy_var_3 ++ ":" ++ show happy_var_5 ++ "]")
+                                                                 else (Map.singleton happy_var_1 (Array happy_var_1 happy_var_3 happy_var_5 False index0Address), arrayLength)
 	) `HappyStk` happyRest
 
 happyReduce_7 = happySpecReduce_2  6 happyReduction_7
 happyReduction_7 (HappyAbsSyn7  happy_var_2)
 	(HappyAbsSyn6  happy_var_1)
 	 =  HappyAbsSyn6
-		 (\vars -> happy_var_1 vars ++ [happy_var_2 vars]
+		 (\vars unusedAddr ->
+                               let (cmds, prevVars) = happy_var_1 vars unusedAddr
+                                   (cmd, newVars) = happy_var_2 prevVars unusedAddr
+                               in  (cmds ++ [cmd], newVars)
 	)
 happyReduction_7 _ _  = notHappyAtAll 
 
 happyReduce_8 = happySpecReduce_1  6 happyReduction_8
 happyReduction_8 (HappyAbsSyn7  happy_var_1)
 	 =  HappyAbsSyn6
-		 (\vars -> [happy_var_1 vars]
+		 (\vars unusedAddr ->
+                               let (cmd, newVars) = happy_var_1 vars unusedAddr
+                               in  ([cmd], newVars)
 	)
 happyReduction_8 _  = notHappyAtAll 
 
@@ -792,9 +801,14 @@ happyReduction_9 (_ `HappyStk`
 	(HappyAbsSyn11  happy_var_1) `HappyStk`
 	happyRest)
 	 = HappyAbsSyn7
-		 (\vars -> case (happy_var_1 vars) of
-                                                                                   Var (Constant c) -> error ("cannot modify '" ++ c ++ "' by ASSIGN because it is an iterator")
-                                                                                   assignId   -> Assign assignId (happy_var_3 vars)
+		 (\vars unusedAddr ->
+                                                                         let successfulResult assignId = (Assign assignId (happy_var_3 vars), Map.adjust setAssigned (name . decl $ assignId) vars)
+                                                                         in  case happy_var_1 vars of
+                                                                                 Var (Iterator c _ _)    -> error ("cannot modify '" ++ c ++ "' by ASSIGN because it is an iterator")
+                                                                                 assignId@(ArrVar _ ind) -> if assigned ind
+                                                                                                              then successfulResult assignId
+                                                                                                              else error ("reading variable '" ++ name ind ++ "' before it was assigned")
+                                                                                 assignId                -> successfulResult assignId
 	) `HappyStk` happyRest
 
 happyReduce_10 = happyReduce 7 7 happyReduction_10
@@ -807,7 +821,10 @@ happyReduction_10 (_ `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn7
-		 (\vars -> IfElse (happy_var_2 vars) (happy_var_4 vars) (happy_var_6 vars)
+		 (\vars unusedAddr ->
+                                                                         let (cmdsT, varsT) = happy_var_4 vars unusedAddr -- po przejsciu przez if zmienna jest zainicjowana
+                                                                             (cmdsF, varsF) = happy_var_6 vars unusedAddr --    gdy jest inicjowana w co najmniej jednym z przebiegow
+                                                                         in  (IfElse (happy_var_2 vars) cmdsT cmdsF, Map.unionWith chooseAssigned varsT varsF)
 	) `HappyStk` happyRest
 
 happyReduce_11 = happyReduce 5 7 happyReduction_11
@@ -818,7 +835,9 @@ happyReduction_11 (_ `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn7
-		 (\vars -> If (happy_var_2 vars) (happy_var_4 vars)
+		 (\vars unusedAddr ->
+                                                                         let (cmdsT, varsT) = happy_var_4 vars unusedAddr -- po przejsciu przez taki if napewno nie bedzie mniej zainicjowanych
+                                                                         in  (If (happy_var_2 vars) cmdsT, varsT)
 	) `HappyStk` happyRest
 
 happyReduce_12 = happyReduce 5 7 happyReduction_12
@@ -829,7 +848,9 @@ happyReduction_12 (_ `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn7
-		 (\vars -> While (happy_var_2 vars) (happy_var_4 vars)
+		 (\vars unusedAddr ->
+                                                                         let (cmdsW, varsW) = happy_var_4 vars unusedAddr -- po przejsciu przez while napewno nie bedzie mniej zainicjowanych
+                                                                         in  (While (happy_var_2 vars) cmdsW, varsW)
 	) `HappyStk` happyRest
 
 happyReduce_13 = happyReduce 5 7 happyReduction_13
@@ -840,7 +861,9 @@ happyReduction_13 (_ `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn7
-		 (\vars -> Repeat (happy_var_2 vars) (happy_var_4 vars)
+		 (\vars unusedAddr ->
+                                                                         let (cmdsR, varsR) = happy_var_2 vars unusedAddr -- po przejsciu przez repeat napewno nie bedzie mniej zainicjowanych
+                                                                         in  (Repeat cmdsR (happy_var_4 vars), varsR)
 	) `HappyStk` happyRest
 
 happyReduce_14 = happyReduce 9 7 happyReduction_14
@@ -855,10 +878,12 @@ happyReduction_14 (_ `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn7
-		 (\vars -> case Map.lookup happy_var_2 vars of
-                                                                                  Nothing -> let localVars = Map.insert happy_var_2 (Constant happy_var_2) vars
-                                                                                             in  ForTo happy_var_2 (happy_var_4 vars) (happy_var_6 vars) (happy_var_8 localVars)
-                                                                                  Just _  -> error (happy_var_2 ++ " is already declared")
+		 (\vars unusedAddr ->
+                                                                         case Map.lookup happy_var_2 vars of
+                                                                             Nothing -> let localVars = Map.insert happy_var_2 (Iterator happy_var_2 True unusedAddr) vars
+                                                                                            (cmdsF, varsF) = happy_var_8 localVars (unusedAddr+1) -- vvv ponizej usuwam iterator vvv
+                                                                                        in  (ForTo (Iterator happy_var_2 True unusedAddr) (happy_var_4 vars) (happy_var_6 vars) cmdsF, Map.delete happy_var_2 varsF)
+                                                                             Just _  -> error (happy_var_2 ++ " is already declared")
 	) `HappyStk` happyRest
 
 happyReduce_15 = happyReduce 9 7 happyReduction_15
@@ -873,10 +898,12 @@ happyReduction_15 (_ `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn7
-		 (\vars -> case Map.lookup happy_var_2 vars of
-                                                                                  Nothing -> let localVars = Map.insert happy_var_2 (Constant happy_var_2) vars
-                                                                                             in  ForDownTo happy_var_2 (happy_var_4 vars) (happy_var_6 vars) (happy_var_8 localVars)
-                                                                                  Just _  -> error (happy_var_2 ++ " is already declared")
+		 (\vars unusedAddr ->
+                                                                         case Map.lookup happy_var_2 vars of
+                                                                             Nothing -> let localVars = Map.insert happy_var_2 (Iterator happy_var_2 True unusedAddr) vars
+                                                                                            (cmdsF, varsF) = happy_var_8 localVars (unusedAddr+1) -- vvv ponizej usuwam iterator vvv
+                                                                                        in  (ForDownTo (Iterator happy_var_2 True unusedAddr) (happy_var_4 vars) (happy_var_6 vars) cmdsF, Map.delete happy_var_2 varsF)
+                                                                             Just _  -> error (happy_var_2 ++ " is already declared")
 	) `HappyStk` happyRest
 
 happyReduce_16 = happySpecReduce_3  7 happyReduction_16
@@ -884,9 +911,14 @@ happyReduction_16 _
 	(HappyAbsSyn11  happy_var_2)
 	_
 	 =  HappyAbsSyn7
-		 (\vars -> case happy_var_2 vars of
-                                                                                   Var (Constant c) -> error ("cannot modify '" ++ c ++ "' by READ because it is an iterator")
-                                                                                   readId     -> Read readId
+		 (\vars unusedAddr ->
+                                                                         let successfulResult readId = (Read readId, Map.adjust setAssigned (name . decl $ readId) vars)
+                                                                         in  case happy_var_2 vars of
+                                                                                 Var (Iterator c _ _)  -> error ("cannot modify '" ++ c ++ "' by READ because it is an iterator")
+                                                                                 readId@(ArrVar _ ind) -> if assigned ind
+                                                                                                            then successfulResult readId
+                                                                                                            else error ("reading variable '" ++ name ind ++ "' before it was assigned")
+                                                                                 readId                -> successfulResult readId
 	)
 happyReduction_16 _ _ _  = notHappyAtAll 
 
@@ -895,7 +927,7 @@ happyReduction_17 _
 	(HappyAbsSyn10  happy_var_2)
 	_
 	 =  HappyAbsSyn7
-		 (\vars -> Write (happy_var_2 vars)
+		 (\vars _ -> (Write (happy_var_2 vars), vars)
 	)
 happyReduction_17 _ _ _  = notHappyAtAll 
 
@@ -1015,17 +1047,30 @@ happyReduction_30 _  = notHappyAtAll
 happyReduce_31 = happySpecReduce_1  10 happyReduction_31
 happyReduction_31 (HappyAbsSyn11  happy_var_1)
 	 =  HappyAbsSyn10
-		 (\vars -> Identifier (happy_var_1 vars)
+		 (\vars ->
+                         case (happy_var_1 vars) of
+                             var@(Var _) -> if assigned $ decl var
+                                              then Identifier var
+                                              else error ("reading variable '" ++ (name $ decl var) ++ "' before it was assigned")
+                             var@(ArrNum _ _) -> if assigned $ decl var
+                                                   then Identifier var
+                                                   else error ("reading from array '" ++ (name $ decl var) ++ "' before any of its elements was assigned")
+                             var@(ArrVar _ _) -> if assigned $ decl var
+                                                   then if assigned $ indexDecl var
+                                                          then Identifier var
+                                                          else error ("reading variable '" ++ (name $ indexDecl var) ++ "' before it was assigned")
+                                                   else error ("reading from array '" ++ (name $ decl var) ++ "' before any of its elements was assigned")
 	)
 happyReduction_31 _  = notHappyAtAll 
 
 happyReduce_32 = happySpecReduce_1  11 happyReduction_32
 happyReduction_32 (HappyTerminal (Pidentifier happy_var_1))
 	 =  HappyAbsSyn11
-		 (\vars -> case Map.lookup happy_var_1 vars of
-                                                       Nothing -> error ("undeclared identifier: " ++ happy_var_1)
-                                                       Just (Array _ _ _) -> error ("missing index for accessing an array: " ++ happy_var_1)
-                                                       Just decl -> Var decl
+		 (\vars ->
+                                              case Map.lookup happy_var_1 vars of
+                                                  Nothing -> error ("undeclared identifier: " ++ happy_var_1)
+                                                  Just (Array _ _ _ _ _) -> error ("missing index for accessing an array: " ++ happy_var_1)
+                                                  Just decl -> Var decl
 	)
 happyReduction_32 _  = notHappyAtAll 
 
@@ -1036,13 +1081,14 @@ happyReduction_33 (_ `HappyStk`
 	(HappyTerminal (Pidentifier happy_var_1)) `HappyStk`
 	happyRest)
 	 = HappyAbsSyn11
-		 (\vars -> case Map.lookup happy_var_1 vars of
-                                                       Nothing -> error ("undeclared array identifier: " ++ happy_var_1)
-                                                       Just arrDecl@(Array _ _ _) -> case Map.lookup happy_var_3 vars of
-                                                                                         Nothing -> error ("undeclared identifier: " ++ happy_var_3)
-                                                                                         Just (Array _ _ _) -> error ("identifier '" ++ happy_var_3 ++ "' may not be an array")
-                                                                                         Just indDecl -> ArrVar arrDecl indDecl
-                                                       Just _  -> error ("identifier '" ++ happy_var_1 ++ "' should be an array")
+		 (\vars ->
+                                              case Map.lookup happy_var_1 vars of
+                                                  Nothing -> error ("undeclared array identifier: " ++ happy_var_1)
+                                                  Just arrDecl@(Array _ _ _ _ _) -> case Map.lookup happy_var_3 vars of
+                                                                                        Nothing -> error ("undeclared identifier: " ++ happy_var_3)
+                                                                                        Just (Array _ _ _ _ _) -> error ("identifier '" ++ happy_var_3 ++ "' may not be an array")
+                                                                                        Just indDecl -> ArrVar arrDecl indDecl
+                                                  Just _  -> error ("identifier '" ++ happy_var_1 ++ "' should be an array")
 	) `HappyStk` happyRest
 
 happyReduce_34 = happyReduce 4 11 happyReduction_34
@@ -1052,10 +1098,11 @@ happyReduction_34 (_ `HappyStk`
 	(HappyTerminal (Pidentifier happy_var_1)) `HappyStk`
 	happyRest)
 	 = HappyAbsSyn11
-		 (\vars -> case Map.lookup happy_var_1 vars of
-                                                       Nothing -> error ("undeclared array identifier: " ++ happy_var_1)
-                                                       Just arrDecl@(Array _ _ _) -> ArrNum arrDecl happy_var_3
-                                                       Just _  -> error ("identifier '" ++ happy_var_1 ++ "' should be an array")
+		 (\vars ->
+                                              case Map.lookup happy_var_1 vars of
+                                                  Nothing -> error ("undeclared array identifier: " ++ happy_var_1)
+                                                  Just arrDecl@(Array _ _ _ _ _) -> ArrNum arrDecl happy_var_3
+                                                  Just _  -> error ("identifier '" ++ happy_var_1 ++ "' should be an array")
 	) `HappyStk` happyRest
 
 happyNewToken action sts stk [] =
@@ -1139,10 +1186,6 @@ happySeq = happyDontSeq
 
 parseError :: [Token] -> a
 parseError _ = error "Parse error"
-
--- case Map.lookup (idName $1) vars of
---                                                                                  Nothing -> error ("ASSIGN to undeclared identifier: " ++ idName $1)
---                                                                                  Just _  ->
 {-# LINE 1 "templates/GenericTemplate.hs" #-}
 {-# LINE 1 "templates/GenericTemplate.hs" #-}
 {-# LINE 1 "<built-in>" #-}

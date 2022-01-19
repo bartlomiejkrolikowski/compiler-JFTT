@@ -13,7 +13,7 @@ clean:
 	rm -f *.o *.hi testGrammar
 
 cleanGrammar:
-	rm Grammar.hs
+	rm -f Grammar.hs
 
 cleanTokens:
-	rm Tokens.hs
+	rm -f Tokens.hs

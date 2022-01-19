@@ -4,4 +4,7 @@ import Grammar
 import System.IO
 import qualified Data.Map as Map
 
-main = getContents >>= putStrLn . show . parse . alexScanTokens
+main = do
+         hSetEncoding stdin utf8
+         hSetEncoding stdout utf8
+         getContents >>= putStrLn . show . parse . alexScanTokens
