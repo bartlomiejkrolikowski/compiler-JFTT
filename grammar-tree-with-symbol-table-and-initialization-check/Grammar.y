@@ -113,13 +113,13 @@ command :: { Variables -> Int -> (Command, Variables) }
       | FOR pidentifier FROM value TO value DO commands ENDFOR     { \vars unusedAddr ->
                                                                          case Map.lookup $2 vars of
                                                                              Nothing -> let localVars = Map.insert $2 (Iterator $2 True unusedAddr) vars
-                                                                                            (cmdsF, varsF) = $8 localVars (unusedAddr+2) -- +2 bo pamietam jeszcze koniec ; v ponizej usuwam iterator v
+                                                                                            (cmdsF, varsF) = $8 localVars (unusedAddr+1) -- vvv ponizej usuwam iterator vvv
                                                                                         in  (ForTo (Iterator $2 True unusedAddr) ($4 vars) ($6 vars) cmdsF, Map.delete $2 varsF)
                                                                              Just _  -> error ($2 ++ " is already declared") }
       | FOR pidentifier FROM value DOWNTO value DO commands ENDFOR { \vars unusedAddr ->
                                                                          case Map.lookup $2 vars of
                                                                              Nothing -> let localVars = Map.insert $2 (Iterator $2 True unusedAddr) vars
-                                                                                            (cmdsF, varsF) = $8 localVars (unusedAddr+2) -- +2 bo pamietam jeszcze koniec ; v ponizej usuwam iterator v
+                                                                                            (cmdsF, varsF) = $8 localVars (unusedAddr+1) -- vvv ponizej usuwam iterator vvv
                                                                                         in  (ForDownTo (Iterator $2 True unusedAddr) ($4 vars) ($6 vars) cmdsF, Map.delete $2 varsF)
                                                                              Just _  -> error ($2 ++ " is already declared") }
       | READ identifier ';'                                        { \vars unusedAddr ->

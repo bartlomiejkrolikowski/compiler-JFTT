@@ -7,10 +7,6 @@ module Instructions
 , assign
 , ifElse
 , onlyIf
-, whileLoop
-, repeatLoop
-, forToLoop
-, forDownToLoop
 ) where
 
 import GrammarTree
@@ -33,8 +29,6 @@ data Register =
 data CondType =
     CondEq | CondNEq | CondLe | CondGe | CondLEq | CondGEq
     deriving (Eq,Show)
-
-data Direction = Up | Down deriving (Eq,Show)
 
 negateCond :: CondType -> CondType
 negateCond CondEq = CondNEq
@@ -64,24 +58,8 @@ computeAbsNumber wasPositive n prog = let cmds = if n `mod` 2 == 0
                          ]
           incrementCommand = if wasPositive then Inc Ra else Dec Ra
 
--- pobiera stala i poprzednie komendy i dopisuje do nich komendy obliczajace ta stala
 computeNumber :: Int -> Code -> Code
 computeNumber n prog = computeAbsNumber (n > 0) (abs n) prog
-
--- zapis wartosci obliczanej podanymi komendami do adresu obliczanego komendami podanymi na 2 miejscu
---    (wszystkie obliczenia zwracaja wynik w Ra) (rejestry nie moga byc aktualnie uzywane)
-storeValIn :: Code -> Code -> Code
-storeValIn cmdsVal cmdsAddr = reverse restoreAndSaveResult ++ cmdsAddr ++ reverse saveTmpResult ++ reverse cmdsVal
-    where saveTmpResult = [ Swap Rh -- w Ra jest wynik, zachowuje go w Rh
-                          ]
-          restoreAndSaveResult = [ Swap Rh -- w Ra jest adres, w Rh wynik
-                                 , Store Rh
-                                 ]
-
--- pobiera wartosc do Ra spod adresu obliczanego przez podane komendy (do Ra)
-loadValFrom :: Code -> Code
-loadValFrom cmdsAddr = reverse loadToRa ++ cmdsAddr
-    where loadToRa = [ Load Ra ] -- w Ra jest adres i laduje do Ra
 
 -- sklejenie dwoch ciagow komend
 joinCmds :: (Code, Int) -> (Code, Int) -> (Code, Int)
@@ -118,7 +96,7 @@ assignArr dest (prog, len) = let cmds = reverse cmdsEnd ++ computeNumber dest (r
 --    (powinna byc obliczona do Ra)
 assign :: Identifier -> (Code, Int) -> (Code, Int)
 assign = matchingAssign
-    where -- matchingAssign (Var (Iterator _ _ _)) _ = error "assigning to constant" -- niepotrzebne, bo sprawdzam juz w parserze, a tak moge zainicjowac iterator w for przez assign
+    where matchingAssign (Var (Iterator _ _ _)) _ = error "assigning to constant"
           matchingAssign (ArrNum arr ind) cmdsExp = assignArr (address arr) (joinCmds (computeIndex ind) cmdsExp)
           matchingAssign (ArrVar arr ind) cmdsExp = assignArr (address arr) (joinCmds (getVarIndex ind) cmdsExp)
           matchingAssign (Var sing) cmdsExp = assignVar (address sing) cmdsExp
@@ -212,41 +190,6 @@ repeatLoop :: CondType -> (Code, Int) -> (Code, Int) -> (Code, Int)
 repeatLoop c cmdsCond cmdsLoop = generalLoop (negateCond c) cmdsLoop cmdsCond cmdsLoop ([],0)
 
 -- kompiluje instrukcje for
--- pobiera informacje o deklarowanym iteratorze, adresie konca zakresu, kierunku iteracji, komendy obliczajace poczatek zakresu,
---    komendy obliczajace koniec zakresu i komendy do wykonania wewnatrz petli (+ licznik)
-forLoop :: Identifier -> Int -> Direction -> (Code, Int) -> (Code, Int) -> (Code, Int) -> (Code, Int)
-forLoop iter rngAddr dir cmdsBeginRng cmdsEndRng cmdsLoop = generalLoop (iterCondition dir) cmdsIntro cmdsCond cmdsLoop cmdsIterMove
-    where iterCondition :: Direction -> CondType -- warunek jaki musi spelniac iterator wzgledem konca zakresu (LEq dla Up, GEq dla Down)
-          iterCondition Up = CondLEq
-          iterCondition Down = CondGEq
-          computeRngAddr = computeNumber rngAddr
-          cmdsIterInit = assign iter cmdsBeginRng
-          cmdsEndInit (codeEndRng, lenEndRng) = let codeEndInit = storeValIn codeEndRng (computeNumber rngAddr [])
-                                                in  (codeEndRng, length codeEndRng)
-          cmdsIntro = joinCmds (cmdsEndInit cmdsEndRng) cmdsIterInit
-          cmdsCond = undefined -- TODO
-          cmdsIterMove = undefined -- TODO
-
--- kompiluje instrukcje for-to
--- pobiera informacje o deklarowanym iteratorze, komendy obliczajace poczatek zakresu, komendy obliczajace koniec zakresu
---    i komendy do wykonania wewnatrz petli (+ licznik)
-forToLoop :: Identifier -> (Code, Int) -> (Code, Int) -> (Code, Int) -> (Code, Int)
-forToLoop iter cmdsBeginRng cmdsEndRng cmdsLoop = forLoop iter (address $ decl iter) Up cmdsBeginRng cmdsEndRng cmdsLoop
-
--- kompiluje instrukcje for-downto
--- pobiera informacje o deklarowanym iteratorze, komendy obliczajace poczatek zakresu, komendy obliczajace koniec zakresu
---    i komendy do wykonania wewnatrz petli (+ licznik)
-forDownToLoop :: Identifier -> (Code, Int) -> (Code, Int) -> (Code, Int) -> (Code, Int)
-forDownToLoop iter cmdsBeginRng cmdsEndRng cmdsLoop = forLoop iter (address $ decl iter) Down cmdsBeginRng cmdsEndRng cmdsLoop
-
--- kompiluje instrukcje read (uwaga: funkcja ma inna nazwe, bo read juz istnieje)
---    pobiera identyfikator, do ktorego nalezy czytac
-readAndStore :: Identifier -> (Code, Int)
-readAndStore ident = assign ident (reverse codeRead, length codeRead)
-    where codeRead = [ Get ] -- czyta wartosc do Ra
-
--- kompiluje instrukcje write
---    pobiera komendy obliczajace wypisywana wartosc (powinny ja obliczac do Ra)
-writeVal :: (Code, Int) -> (Code, Int)
-writeVal (codeVal, lenVal) = (reverse codeWrite ++ codeVal, length codeWrite + lenVal)
-    where codeWrite = [ Put ] -- wypisuje wartosc z Ra
+-- pobiera informacje o adresie deklarowanego iteratora, adresie konca zakresu
+forLoop :: Int -> Int -> (Code, Int) -> (Code, Int) -> (Code, Int) -> (Code, Int)
+forLoop = undefined

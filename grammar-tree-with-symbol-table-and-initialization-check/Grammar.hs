@@ -881,7 +881,7 @@ happyReduction_14 (_ `HappyStk`
 		 (\vars unusedAddr ->
                                                                          case Map.lookup happy_var_2 vars of
                                                                              Nothing -> let localVars = Map.insert happy_var_2 (Iterator happy_var_2 True unusedAddr) vars
-                                                                                            (cmdsF, varsF) = happy_var_8 localVars (unusedAddr+2) -- +2 bo pamietam jeszcze koniec ; v ponizej usuwam iterator v
+                                                                                            (cmdsF, varsF) = happy_var_8 localVars (unusedAddr+1) -- vvv ponizej usuwam iterator vvv
                                                                                         in  (ForTo (Iterator happy_var_2 True unusedAddr) (happy_var_4 vars) (happy_var_6 vars) cmdsF, Map.delete happy_var_2 varsF)
                                                                              Just _  -> error (happy_var_2 ++ " is already declared")
 	) `HappyStk` happyRest
@@ -901,7 +901,7 @@ happyReduction_15 (_ `HappyStk`
 		 (\vars unusedAddr ->
                                                                          case Map.lookup happy_var_2 vars of
                                                                              Nothing -> let localVars = Map.insert happy_var_2 (Iterator happy_var_2 True unusedAddr) vars
-                                                                                            (cmdsF, varsF) = happy_var_8 localVars (unusedAddr+2) -- +2 bo pamietam jeszcze koniec ; v ponizej usuwam iterator v
+                                                                                            (cmdsF, varsF) = happy_var_8 localVars (unusedAddr+1) -- vvv ponizej usuwam iterator vvv
                                                                                         in  (ForDownTo (Iterator happy_var_2 True unusedAddr) (happy_var_4 vars) (happy_var_6 vars) cmdsF, Map.delete happy_var_2 varsF)
                                                                              Just _  -> error (happy_var_2 ++ " is already declared")
 	) `HappyStk` happyRest
