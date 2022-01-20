@@ -28,6 +28,8 @@ module Expressions
 
 import Code
 import GrammarTree
+import FastBinRegMultCode
+import FastBinRegDivModCode
 
 -- wyrazenia zwracaja komendy (+ ich liczba) zwracajace wartosc w Ra
 -- warunki zwracaja dodatkowo rodzaj warunku (jako CondType)
@@ -134,7 +136,7 @@ timesExpr valL valR = cmdsMult (loadVal valL) (loadVal valR)
 -- oblicza div i mod dwoch wartosci obliczonych odpowiednio w Ra i Rd przez podane komendy
 cmdsDivMod :: Code -> Code -> (Code, Int)
 cmdsDivMod codeA codeD = appendLength $ codeBinExpr codeDivModRegs codeA codeD
-    where codeDivModRegs = undefined -- wykonuje obliczenia, wyniki: div w Ra, mod w Rb <----------------------------------------------- TODO
+    where codeDivModRegs = reverse fastBinRegDivModCode -- wykonuje obliczenia, wyniki: div w Ra, mod w Rb
 
 -- oblicza div dwoch wartosci obliczonych odpowiednio w Ra i Rd przez podane komendy
 cmdsDiv :: Code -> Code -> (Code, Int)

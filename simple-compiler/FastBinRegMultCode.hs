@@ -48,7 +48,7 @@ initMult = [ Reset Rb -- vvv
            , Reset Re -- vvv
            , Inc Re   -- ^^^ zapisanie 1 do Re (koszt: 2)
            , Reset Rf -- vvv
-           , Inc Rf   -- ^^^ zapisanie 1 do Rf (koszt: 2)
+           , Dec Rf   -- ^^^ zapisanie -1 do Rf (koszt: 2)
            ]
 
 -- tresc mnozacej petli
@@ -60,30 +60,30 @@ initMult = [ Reset Rb -- vvv
 --    Re - 1
 --    Rf - -1
 loopMult :: Code
-loopMult = [ Jzero 21   -- wyjscie z petli (warunek: Ra == 0 - w Rc jest wynik)
+loopMult = [ Jzero 22   -- wyjscie z petli (warunek: Ra == 0 - w Rc jest wynik)
            , Inc Ra
            , Jzero 16   -- wyjscie z petli (warunek: Ra == -1 - trzeba od Rc odjac Rd: -1*Rd = -Rd)
            , Dec Ra     -- tu: Ra nie jest -1 ani 0
            , Shift Rf   -- vvv Ra /= 2
            , Shift Re   --     Ra *= 2
-           , Sub Rb     -- ^^^ obliczenie Ra mod 2 (-1 dla nieparzystych, 0 dla parzystych) (koszt: 12)
+           , Sub Rb     -- ^^^ obliczenie Ra mod 2 (-1 dla nieparzystych, 0 dla parzystych) (koszt: 20)
            , Jzero 4    -- jesli Ra jest parzyste to pomijam zmiane akumulatora
            , Swap Rc    -- vvv (tu Ra jest nieparzyste)
            , Add Rd
            , Swap Rc    -- ^^^ dodanie do wyniku Rd * (Ra mod 2) == 1 (koszt: 12)
            , Swap Rd    -- vvv
            , Shift Re
-           , Swap Rd    -- ^^^ Rd *= 2 (koszt: 3)
+           , Swap Rd    -- ^^^ Rd *= 2 (koszt: 7)
            , Add Rb     -- vvv (odtwarzam Ra - poprzednio bylo Sub Rb)
            , Shift Rf
            , Swap Rb
-           , Shift Rf   -- ^^^ Ra,Rb /= 2 (koszt: 13)
+           , Shift Rf   -- ^^^ Ra,Rb /= 2 (koszt: 21)
            , Jump (-18) -- powrot na poczatek petli
            , Swap Rc    -- vvv (tu: Ra == -1)
            , Sub Rd
-           , Swap Rc    -- ^^ ostatnie dodawanie: Rc += Ra * Rd <=> Rc += -Rd <=> Rc -= Rd
+           , Swap Rc    -- ^^ ostatnie dodawanie: Rc += Ra * Rd <=> Rc += -Rd <=> Rc -= Rd (koszt: 12)
            ]
 
--- zapisuje wynik do Ra (wynik jest w Re)
+-- zapisuje wynik do Ra (wynik jest w Rc)
 endMult :: Code
-endMult = [ Swap Re ]
+endMult = [ Swap Rc ]
