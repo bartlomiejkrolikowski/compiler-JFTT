@@ -125,7 +125,7 @@ minusExpr valL valR = cmdsSub (loadVal valL) (loadVal valR)
 -- mnozy dwie wartosci obliczone odpowiednio w Ra i Rd przez podane komendy
 cmdsMult :: Code -> Code -> (Code, Int)
 cmdsMult codeA codeD = appendLength $ codeBinExpr codeMultRegs codeA codeD
-    where codeMultRegs = undefined -- mnozy Ra przez Rd, wynik w Ra <------------------------------------------------------------------- TODO
+    where codeMultRegs = reverse fastBinRegMultCode -- mnozy Ra przez Rd, wynik w Ra
 
 -- kompiluje dodawanie dwoch wartosci, wynik zapisuje do Ra
 timesExpr :: Value -> Value -> (Code, Int)
