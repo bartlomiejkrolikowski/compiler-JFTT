@@ -3,6 +3,7 @@ module GrammarTree
 , Declarations(..)
 , Variables(..)
 , Variable(..)
+, NotAssignedSet(..)
 , Commands(..)
 , Command(..)
 , Expression(..)
@@ -11,9 +12,11 @@ module GrammarTree
 , Identifier(..)
 , setAssigned
 , chooseAssigned
+, assertAssigned
 ) where
 
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 
 data Program = Program Declarations (Commands, Variables) deriving (Eq,Show)
 type Declarations = (Variables, Int) -- tablica zmiennych i najnizszy dostepny adres
@@ -22,6 +25,8 @@ data Variable = SingleVar { name::String, assigned::Bool, address::Int } | -- ad
                 Array { name::String, begin::Int, end::Int, assigned::Bool, address::Int } | -- address = numer komorki o indeksie 0 (nawet jesli jest poza zakresem)
                 Iterator { name::String, assigned::Bool, address::Int } -- address = numer komorki pamieci
                 deriving (Eq,Show)
+
+type NotAssignedSet = Set.Set String
 
 -- przypisanie zmiennej wartosci
 setAssigned :: Variable -> Variable
@@ -35,6 +40,20 @@ chooseAssigned (SingleVar n1 asgn1 addr1) (SingleVar n2 asgn2 addr2) = (SingleVa
 chooseAssigned (Array n1 b1 e1 asgn1 addr1) (Array n2 b2 e2 asgn2 addr2) = (Array n1 b1 e1 (asgn1 || asgn2) addr1)
 chooseAssigned iter1@(Iterator _ _ _) (Iterator _ _ _) = iter1 -- iterator sie nie zmienia
 chooseAssigned _ _ = error "one key with two different values"
+
+-- sprawdzam czy wszystkie czytane w if-ach zmienne zostaly zainicjowane przed koncem petli
+assertAssigned :: Variables -> NotAssignedSet -> NotAssignedSet
+assertAssigned vars nas = let stillNotAssigned = snd $ Set.foldr insertIfNotAssigned (vars, Set.empty) nas
+                          in  if Set.size stillNotAssigned == 0
+                                then stillNotAssigned -- wszystko w koncu zainicjowane
+                                else error ("those variables are read before they were assigned: " ++ show (Set.toList stillNotAssigned)) -- wyswietlam niezainicjowane
+    where insertIfNotAssigned :: String -> (Variables, NotAssignedSet) -> (Variables, NotAssignedSet)
+          insertIfNotAssigned varName acc@(varsAcc, nasAcc) =
+              case Map.lookup varName varsAcc of
+                  Nothing -> acc
+                  Just v  -> if assigned v
+                               then acc
+                               else (varsAcc, Set.insert varName nasAcc) -- zmienna nadal niezainicjowana
 
 type Commands = [Command]
 data Command =
