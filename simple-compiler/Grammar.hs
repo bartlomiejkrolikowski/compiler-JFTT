@@ -7,6 +7,7 @@ import Tokens
 import GrammarTree
 import Instructions
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import qualified Data.Array as Happy_Data_Array
 import qualified Data.Bits as Bits
 import Control.Applicative(Applicative(..))
@@ -19,11 +20,11 @@ data HappyAbsSyn
 	| HappyErrorToken Int
 	| HappyAbsSyn4 (Program)
 	| HappyAbsSyn5 ((Map.Map String Variable, Int))
-	| HappyAbsSyn6 (Variables -> Int -> ([Command], Variables))
-	| HappyAbsSyn7 (Variables -> Int -> (Command, Variables))
-	| HappyAbsSyn8 (Variables -> Expression)
-	| HappyAbsSyn9 (Variables -> Condition)
-	| HappyAbsSyn10 (Variables -> Value)
+	| HappyAbsSyn6 (Variables -> Int -> Bool -> Bool -> ([Command], Variables, NotAssignedSet))
+	| HappyAbsSyn7 (Variables -> Int -> Bool -> Bool -> (Command, Variables, NotAssignedSet))
+	| HappyAbsSyn8 (Variables -> Bool -> Bool -> (Expression, NotAssignedSet))
+	| HappyAbsSyn9 (Variables -> Bool -> Bool -> (Condition, NotAssignedSet))
+	| HappyAbsSyn10 (Variables -> Bool -> Bool -> (Value, NotAssignedSet))
 	| HappyAbsSyn11 (Variables -> Identifier)
 
 {- to allow type-synonyms as our monads (likely
@@ -706,7 +707,7 @@ happyReduction_1 (_ `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn4
-		 (let vars = happy_var_2 in Program vars (happy_var_4 (fst vars) (snd vars))
+		 (let vars = happy_var_2; (cmds,newVars,_) = (happy_var_4 (fst vars) (snd vars) False False) in Program vars (cmds,newVars)
 	) `HappyStk` happyRest
 
 happyReduce_2 = happySpecReduce_3  4 happyReduction_2
@@ -714,7 +715,7 @@ happyReduction_2 _
 	(HappyAbsSyn6  happy_var_2)
 	_
 	 =  HappyAbsSyn4
-		 (let vars = (Map.empty, 0) in Program vars (happy_var_2 (fst vars) (snd vars))
+		 (let vars = (Map.empty, 0); (cmds,newVars,_) = (happy_var_2 (fst vars) (snd vars) False False) in Program vars (cmds,newVars)
 	)
 happyReduction_2 _ _ _  = notHappyAtAll 
 
@@ -778,19 +779,19 @@ happyReduce_7 = happySpecReduce_2  6 happyReduction_7
 happyReduction_7 (HappyAbsSyn7  happy_var_2)
 	(HappyAbsSyn6  happy_var_1)
 	 =  HappyAbsSyn6
-		 (\vars unusedAddr ->
-                               let (cmds, prevVars) = happy_var_1 vars unusedAddr
-                                   (cmd, newVars) = happy_var_2 prevVars unusedAddr
-                               in  (cmds ++ [cmd], newVars)
+		 (\vars unusedAddr inLoop inIfinLoop ->
+                               let (cmds, prevVars, prevNas) = happy_var_1 vars unusedAddr inLoop inIfinLoop
+                                   (cmd, newVars, newNas) = happy_var_2 prevVars unusedAddr inLoop inIfinLoop
+                               in  (cmds ++ [cmd], newVars, Set.union prevNas newNas)
 	)
 happyReduction_7 _ _  = notHappyAtAll 
 
 happyReduce_8 = happySpecReduce_1  6 happyReduction_8
 happyReduction_8 (HappyAbsSyn7  happy_var_1)
 	 =  HappyAbsSyn6
-		 (\vars unusedAddr ->
-                               let (cmd, newVars) = happy_var_1 vars unusedAddr
-                               in  ([cmd], newVars)
+		 (\vars unusedAddr inLoop inIfinLoop ->
+                               let (cmd, newVars, newNas) = happy_var_1 vars unusedAddr inLoop inIfinLoop
+                               in  ([cmd], newVars, newNas)
 	)
 happyReduction_8 _  = notHappyAtAll 
 
@@ -801,13 +802,17 @@ happyReduction_9 (_ `HappyStk`
 	(HappyAbsSyn11  happy_var_1) `HappyStk`
 	happyRest)
 	 = HappyAbsSyn7
-		 (\vars unusedAddr ->
-                                                                         let successfulResult assignId = (Assign assignId (happy_var_3 vars), Map.adjust setAssigned (name . decl $ assignId) vars)
+		 (\vars unusedAddr inLoop inIfinLoop ->
+                                                                         let successfulResult assignId = let (expr, nas) = happy_var_3 vars inLoop inIfinLoop
+                                                                                                         in  (Assign assignId expr, Map.adjust setAssigned (name . decl $ assignId) vars, nas)
                                                                          in  case happy_var_1 vars of
                                                                                  Var (Iterator c _ _)    -> error ("cannot modify '" ++ c ++ "' by ASSIGN because it is an iterator")
-                                                                                 assignId@(ArrVar _ ind) -> if assigned ind
-                                                                                                              then successfulResult assignId
-                                                                                                              else error ("reading variable '" ++ name ind ++ "' before it was assigned")
+                                                                                 assignId@(ArrVar _ ind) -> let succAId = successfulResult assignId
+                                                                                                            in  if assigned ind
+                                                                                                                  then succAId
+                                                                                                                  else if inIfinLoop -- jesli jestem w if, w petli to zmienna moze byc zainicjowana w innym warunku w poprzednim przebiegu
+                                                                                                                         then Set.insert (name ind) <$> succAId
+                                                                                                                         else error ("reading variable '" ++ name ind ++ "' before it was assigned")
                                                                                  assignId                -> successfulResult assignId
 	) `HappyStk` happyRest
 
@@ -821,10 +826,12 @@ happyReduction_10 (_ `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn7
-		 (\vars unusedAddr ->
-                                                                         let (cmdsT, varsT) = happy_var_4 vars unusedAddr -- po przejsciu przez if zmienna jest zainicjowana
-                                                                             (cmdsF, varsF) = happy_var_6 vars unusedAddr --    gdy jest inicjowana w co najmniej jednym z przebiegow
-                                                                         in  (IfElse (happy_var_2 vars) cmdsT cmdsF, Map.unionWith chooseAssigned varsT varsF)
+		 (\vars unusedAddr inLoop inIfinLoop ->
+                                                                         let isInIfinLoop = inLoop || inIfinLoop -- albo juz jestem wewnatrz if w petli, albo tylko w petli i wchodze do if
+                                                                             (cmdsT, varsT, nasT) = happy_var_4 vars unusedAddr inLoop isInIfinLoop -- po przejsciu przez if zmienna jest zainicjowana
+                                                                             (cmdsF, varsF, nasF) = happy_var_6 vars unusedAddr inLoop isInIfinLoop --    gdy jest inicjowana w co najmniej jednym z przebiegow
+                                                                             (cond, nasC) = happy_var_2 vars inLoop inIfinLoop -- warunek jest liczony na poczatku if - w zewnetrznym kontekscie
+                                                                         in  (IfElse cond cmdsT cmdsF, Map.unionWith chooseAssigned varsT varsF, Set.union nasC $ Set.union nasT nasF)
 	) `HappyStk` happyRest
 
 happyReduce_11 = happyReduce 5 7 happyReduction_11
@@ -835,9 +842,11 @@ happyReduction_11 (_ `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn7
-		 (\vars unusedAddr ->
-                                                                         let (cmdsT, varsT) = happy_var_4 vars unusedAddr -- po przejsciu przez taki if napewno nie bedzie mniej zainicjowanych
-                                                                         in  (If (happy_var_2 vars) cmdsT, varsT)
+		 (\vars unusedAddr inLoop inIfinLoop ->
+                                                                         let isInIfinLoop = inLoop || inIfinLoop -- albo juz jestem wewnatrz if w petli, albo tylko w petli i wchodze do if
+                                                                             (cmdsT, varsT, nasT) = happy_var_4 vars unusedAddr inLoop isInIfinLoop -- po przejsciu przez taki if napewno nie bedzie mniej zainicjowanych
+                                                                             (cond, nasC) = happy_var_2 vars inLoop inIfinLoop -- warunek jest liczony na poczatku if - w zewnetrznym kontekscie
+                                                                         in  (If cond cmdsT, varsT, Set.union nasC nasT)
 	) `HappyStk` happyRest
 
 happyReduce_12 = happyReduce 5 7 happyReduction_12
@@ -848,9 +857,15 @@ happyReduction_12 (_ `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn7
-		 (\vars unusedAddr ->
-                                                                         let (cmdsW, varsW) = happy_var_4 vars unusedAddr -- po przejsciu przez while napewno nie bedzie mniej zainicjowanych
-                                                                         in  (While (happy_var_2 vars) cmdsW, varsW)
+		 (\vars unusedAddr inLoop inIfinLoop ->
+                                                                         if inIfinLoop
+                                                                           then let (cond, nasC) = happy_var_2 vars inLoop inIfinLoop -- analogicznie jak dla pozostalych (nie moge byc bardziej w petli)
+                                                                                    (cmdsW, varsW, nasW) = happy_var_4 vars unusedAddr True inIfinLoop -- po przejsciu przez while napewno nie bedzie mniej zainicjowanych
+                                                                                in  (While cond cmdsW, varsW, Set.union nasC nasW)
+                                                                           else let (cond, nasC) = happy_var_2 vars inLoop inIfinLoop -- warunek jest jeszcze poza petla
+                                                                                    (cmdsW, varsW, nasW) = happy_var_4 vars unusedAddr True inIfinLoop -- po przejsciu przez while napewno nie bedzie mniej zainicjowanych
+                                                                                    stillNotAssigned = assertAssignment varsW nasW -- sprawdzam czy wszystkie czytane w petli, w if-ach zmienne zostaly zainicjowane przed koncem petli (jesli nie to blad)
+                                                                                in  (While cond cmdsW, varsW, Set.union nasC stillNotAssigned)
 	) `HappyStk` happyRest
 
 happyReduce_13 = happyReduce 5 7 happyReduction_13
@@ -861,9 +876,15 @@ happyReduction_13 (_ `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn7
-		 (\vars unusedAddr ->
-                                                                         let (cmdsR, varsR) = happy_var_2 vars unusedAddr -- po przejsciu przez repeat napewno nie bedzie mniej zainicjowanych + w warunku sa juz zainicjowane
-                                                                         in  (Repeat cmdsR (happy_var_4 varsR), varsR)
+		 (\vars unusedAddr inLoop inIfinLoop ->
+                                                                         if inIfinLoop
+                                                                           then let (cmdsR, varsR, nasR) = happy_var_2 vars unusedAddr True inIfinLoop -- po przejsciu przez repeat napewno nie bedzie mniej zainicjowanych + w warunku sa juz zainicjowane
+                                                                                    (cond, nasC) = happy_var_4 varsR inLoop inIfinLoop -- analogicznie jak dla pozostalych (nie moge byc bardziej w petli)
+                                                                                in  (Repeat cmdsR cond, varsR, Set.union nasR nasC)
+                                                                           else let (cmdsR, varsR, nasR) = happy_var_2 vars unusedAddr True inIfinLoop -- po przejsciu przez repeat napewno nie bedzie mniej zainicjowanych + w warunku sa juz zainicjowane
+                                                                                    (cond, nasC) = happy_var_4 varsR inLoop inIfinLoop -- warunek jest juz poza petla
+                                                                                    stillNotAssigned = assertAssignment varsR nasR -- sprawdzam czy wszystkie czytane w petli, w if-ach zmienne zostaly zainicjowane przed koncem petli (jesli nie to blad)
+                                                                                in  (Repeat cmdsR cond, varsR, Set.union nasC stillNotAssigned)
 	) `HappyStk` happyRest
 
 happyReduce_14 = happyReduce 9 7 happyReduction_14
@@ -878,11 +899,21 @@ happyReduction_14 (_ `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn7
-		 (\vars unusedAddr ->
+		 (\vars unusedAddr inLoop inIfinLoop ->
                                                                          case Map.lookup happy_var_2 vars of
-                                                                             Nothing -> let localVars = Map.insert happy_var_2 (Iterator happy_var_2 True unusedAddr) vars
-                                                                                            (cmdsF, varsF) = happy_var_8 localVars (unusedAddr+2) -- +2 bo pamietam jeszcze koniec ; v ponizej usuwam iterator v
-                                                                                        in  (ForTo (Iterator happy_var_2 True unusedAddr) (happy_var_4 vars) (happy_var_6 vars) cmdsF, Map.delete happy_var_2 varsF)
+                                                                             Nothing ->
+                                                                                 if inIfinLoop
+                                                                                   then let (valFrom, nasFrom) = happy_var_4 vars inLoop inIfinLoop
+                                                                                            (valTo, nasTo) = happy_var_6 vars inLoop inIfinLoop
+                                                                                            localVars = Map.insert happy_var_2 (Iterator happy_var_2 True unusedAddr) vars
+                                                                                            (cmdsF, varsF, nasF) = happy_var_8 localVars (unusedAddr+2) True inIfinLoop -- +2 bo pamietam jeszcze koniec;ponizej usuwam iterator
+                                                                                        in  (ForTo (Iterator happy_var_2 True unusedAddr) valFrom valTo cmdsF, Map.delete happy_var_2 varsF, Set.union nasFrom $ Set.union nasTo nasF)
+                                                                                   else let (valFrom, nasFrom) = happy_var_4 vars inLoop inIfinLoop -- konce zakresow sa obliczane jeszcze przed petla
+                                                                                            (valTo, nasTo) = happy_var_6 vars inLoop inIfinLoop
+                                                                                            localVars = Map.insert happy_var_2 (Iterator happy_var_2 True unusedAddr) vars
+                                                                                            (cmdsF, varsF, nasF) = happy_var_8 localVars (unusedAddr+2) True inIfinLoop -- +2 bo pamietam jeszcze koniec;ponizej usuwam iterator
+                                                                                            stillNotAssigned = assertAssignment varsF nasF -- sprawdzam czy wszystkie czytane w petli, w if-ach zmienne zostaly zainicjowane przed koncem petli (jesli nie to blad)
+                                                                                        in  (ForTo (Iterator happy_var_2 True unusedAddr) valFrom valTo cmdsF, Map.delete happy_var_2 varsF, Set.union nasFrom $ Set.union nasTo stillNotAssigned)
                                                                              Just _  -> error (happy_var_2 ++ " is already declared")
 	) `HappyStk` happyRest
 
@@ -898,11 +929,21 @@ happyReduction_15 (_ `HappyStk`
 	_ `HappyStk`
 	happyRest)
 	 = HappyAbsSyn7
-		 (\vars unusedAddr ->
+		 (\vars unusedAddr inLoop inIfinLoop ->
                                                                          case Map.lookup happy_var_2 vars of
-                                                                             Nothing -> let localVars = Map.insert happy_var_2 (Iterator happy_var_2 True unusedAddr) vars
-                                                                                            (cmdsF, varsF) = happy_var_8 localVars (unusedAddr+2) -- +2 bo pamietam jeszcze koniec ; v ponizej usuwam iterator v
-                                                                                        in  (ForDownTo (Iterator happy_var_2 True unusedAddr) (happy_var_4 vars) (happy_var_6 vars) cmdsF, Map.delete happy_var_2 varsF)
+                                                                             Nothing ->
+                                                                                 if inIfinLoop
+                                                                                   then let (valFrom, nasFrom) = happy_var_4 vars inLoop inIfinLoop
+                                                                                            (valTo, nasTo) = happy_var_6 vars inLoop inIfinLoop
+                                                                                            localVars = Map.insert happy_var_2 (Iterator happy_var_2 True unusedAddr) vars
+                                                                                            (cmdsF, varsF, nasF) = happy_var_8 localVars (unusedAddr+2) True inIfinLoop -- +2 bo pamietam jeszcze koniec;ponizej usuwam iterator
+                                                                                        in  (ForDownTo (Iterator happy_var_2 True unusedAddr) valFrom valTo cmdsF, Map.delete happy_var_2 varsF, Set.union nasFrom $ Set.union nasTo nasF)
+                                                                                   else let (valFrom, nasFrom) = happy_var_4 vars inLoop inIfinLoop -- konce zakresow sa obliczane jeszcze przed petla
+                                                                                            (valTo, nasTo) = happy_var_6 vars inLoop inIfinLoop
+                                                                                            localVars = Map.insert happy_var_2 (Iterator happy_var_2 True unusedAddr) vars
+                                                                                            (cmdsF, varsF, nasF) = happy_var_8 localVars (unusedAddr+2) True inIfinLoop -- +2 bo pamietam jeszcze koniec;ponizej usuwam iterator
+                                                                                            stillNotAssigned = assertAssignment varsF nasF -- sprawdzam czy wszystkie czytane w petli, w if-ach zmienne zostaly zainicjowane przed koncem petli (jesli nie to blad)
+                                                                                        in  (ForDownTo (Iterator happy_var_2 True unusedAddr) valFrom valTo cmdsF, Map.delete happy_var_2 varsF, Set.union nasFrom $ Set.union nasTo stillNotAssigned)
                                                                              Just _  -> error (happy_var_2 ++ " is already declared")
 	) `HappyStk` happyRest
 
@@ -911,13 +952,15 @@ happyReduction_16 _
 	(HappyAbsSyn11  happy_var_2)
 	_
 	 =  HappyAbsSyn7
-		 (\vars unusedAddr ->
-                                                                         let successfulResult readId = (Read readId, Map.adjust setAssigned (name . decl $ readId) vars)
+		 (\vars unusedAddr inLoop inIfinLoop ->
+                                                                         let successfulResult readId = (Read readId, Map.adjust setAssigned (name . decl $ readId) vars, Set.empty)
                                                                          in  case happy_var_2 vars of
                                                                                  Var (Iterator c _ _)  -> error ("cannot modify '" ++ c ++ "' by READ because it is an iterator")
                                                                                  readId@(ArrVar _ ind) -> if assigned ind
                                                                                                             then successfulResult readId
-                                                                                                            else error ("reading variable '" ++ name ind ++ "' before it was assigned")
+                                                                                                            else if inIfinLoop -- jesli jestem w if, w petli to zmienna moze byc zainicjowana w innym warunku w poprzednim przebiegu
+                                                                                                                     then Set.insert (name ind) <$> successfulResult readId
+                                                                                                                     else error ("reading variable '" ++ name ind ++ "' before it was assigned")
                                                                                  readId                -> successfulResult readId
 	)
 happyReduction_16 _ _ _  = notHappyAtAll 
@@ -927,14 +970,14 @@ happyReduction_17 _
 	(HappyAbsSyn10  happy_var_2)
 	_
 	 =  HappyAbsSyn7
-		 (\vars _ -> (Write (happy_var_2 vars), vars)
+		 (\vars _ inLoop inIfinLoop -> let (val, nas) = (happy_var_2 vars inLoop inIfinLoop) in (Write val, vars, nas)
 	)
 happyReduction_17 _ _ _  = notHappyAtAll 
 
 happyReduce_18 = happySpecReduce_1  8 happyReduction_18
 happyReduction_18 (HappyAbsSyn10  happy_var_1)
 	 =  HappyAbsSyn8
-		 (\vars -> Single (happy_var_1 vars)
+		 (\vars inLoop inIfinLoop  -> let (val, nas) = (happy_var_1 vars inLoop inIfinLoop) in (Single val, nas)
 	)
 happyReduction_18 _  = notHappyAtAll 
 
@@ -943,7 +986,10 @@ happyReduction_19 (HappyAbsSyn10  happy_var_3)
 	_
 	(HappyAbsSyn10  happy_var_1)
 	 =  HappyAbsSyn8
-		 (\vars -> Plus (happy_var_1 vars) (happy_var_3 vars)
+		 (\vars inLoop inIfinLoop ->
+                                let (valL, nasL) = happy_var_1 vars inLoop inIfinLoop
+                                    (valR, nasR) = happy_var_3 vars inLoop inIfinLoop
+                                in  (Plus valL valR, Set.union nasL nasR)
 	)
 happyReduction_19 _ _ _  = notHappyAtAll 
 
@@ -952,7 +998,10 @@ happyReduction_20 (HappyAbsSyn10  happy_var_3)
 	_
 	(HappyAbsSyn10  happy_var_1)
 	 =  HappyAbsSyn8
-		 (\vars -> Minus (happy_var_1 vars) (happy_var_3 vars)
+		 (\vars inLoop inIfinLoop ->
+                                let (valL, nasL) = happy_var_1 vars inLoop inIfinLoop
+                                    (valR, nasR) = happy_var_3 vars inLoop inIfinLoop
+                                in  (Minus valL valR, Set.union nasL nasR)
 	)
 happyReduction_20 _ _ _  = notHappyAtAll 
 
@@ -961,7 +1010,10 @@ happyReduction_21 (HappyAbsSyn10  happy_var_3)
 	_
 	(HappyAbsSyn10  happy_var_1)
 	 =  HappyAbsSyn8
-		 (\vars -> Times (happy_var_1 vars) (happy_var_3 vars)
+		 (\vars inLoop inIfinLoop ->
+                                let (valL, nasL) = happy_var_1 vars inLoop inIfinLoop
+                                    (valR, nasR) = happy_var_3 vars inLoop inIfinLoop
+                                in  (Times valL valR, Set.union nasL nasR)
 	)
 happyReduction_21 _ _ _  = notHappyAtAll 
 
@@ -970,7 +1022,10 @@ happyReduction_22 (HappyAbsSyn10  happy_var_3)
 	_
 	(HappyAbsSyn10  happy_var_1)
 	 =  HappyAbsSyn8
-		 (\vars -> Div (happy_var_1 vars) (happy_var_3 vars)
+		 (\vars inLoop inIfinLoop ->
+                                let (valL, nasL) = happy_var_1 vars inLoop inIfinLoop
+                                    (valR, nasR) = happy_var_3 vars inLoop inIfinLoop
+                                in  (Div valL valR, Set.union nasL nasR)
 	)
 happyReduction_22 _ _ _  = notHappyAtAll 
 
@@ -979,7 +1034,10 @@ happyReduction_23 (HappyAbsSyn10  happy_var_3)
 	_
 	(HappyAbsSyn10  happy_var_1)
 	 =  HappyAbsSyn8
-		 (\vars -> Mod (happy_var_1 vars) (happy_var_3 vars)
+		 (\vars inLoop inIfinLoop ->
+                                let (valL, nasL) = happy_var_1 vars inLoop inIfinLoop
+                                    (valR, nasR) = happy_var_3 vars inLoop inIfinLoop
+                                in  (Mod valL valR, Set.union nasL nasR)
 	)
 happyReduction_23 _ _ _  = notHappyAtAll 
 
@@ -988,7 +1046,10 @@ happyReduction_24 (HappyAbsSyn10  happy_var_3)
 	_
 	(HappyAbsSyn10  happy_var_1)
 	 =  HappyAbsSyn9
-		 (\vars -> Eq (happy_var_1 vars) (happy_var_3 vars)
+		 (\vars inLoop inIfinLoop ->
+                               let (valL, nasL) = happy_var_1 vars inLoop inIfinLoop
+                                   (valR, nasR) = happy_var_3 vars inLoop inIfinLoop
+                               in  (Eq valL valR, Set.union nasL nasR)
 	)
 happyReduction_24 _ _ _  = notHappyAtAll 
 
@@ -997,7 +1058,10 @@ happyReduction_25 (HappyAbsSyn10  happy_var_3)
 	_
 	(HappyAbsSyn10  happy_var_1)
 	 =  HappyAbsSyn9
-		 (\vars -> NEq (happy_var_1 vars) (happy_var_3 vars)
+		 (\vars inLoop inIfinLoop ->
+                               let (valL, nasL) = happy_var_1 vars inLoop inIfinLoop
+                                   (valR, nasR) = happy_var_3 vars inLoop inIfinLoop
+                               in  (NEq valL valR, Set.union nasL nasR)
 	)
 happyReduction_25 _ _ _  = notHappyAtAll 
 
@@ -1006,7 +1070,10 @@ happyReduction_26 (HappyAbsSyn10  happy_var_3)
 	_
 	(HappyAbsSyn10  happy_var_1)
 	 =  HappyAbsSyn9
-		 (\vars -> Le (happy_var_1 vars) (happy_var_3 vars)
+		 (\vars inLoop inIfinLoop ->
+                               let (valL, nasL) = happy_var_1 vars inLoop inIfinLoop
+                                   (valR, nasR) = happy_var_3 vars inLoop inIfinLoop
+                               in  (Le valL valR, Set.union nasL nasR)
 	)
 happyReduction_26 _ _ _  = notHappyAtAll 
 
@@ -1015,7 +1082,10 @@ happyReduction_27 (HappyAbsSyn10  happy_var_3)
 	_
 	(HappyAbsSyn10  happy_var_1)
 	 =  HappyAbsSyn9
-		 (\vars -> Ge (happy_var_1 vars) (happy_var_3 vars)
+		 (\vars inLoop inIfinLoop ->
+                               let (valL, nasL) = happy_var_1 vars inLoop inIfinLoop
+                                   (valR, nasR) = happy_var_3 vars inLoop inIfinLoop
+                               in  (Ge valL valR, Set.union nasL nasR)
 	)
 happyReduction_27 _ _ _  = notHappyAtAll 
 
@@ -1024,7 +1094,10 @@ happyReduction_28 (HappyAbsSyn10  happy_var_3)
 	_
 	(HappyAbsSyn10  happy_var_1)
 	 =  HappyAbsSyn9
-		 (\vars -> LEq (happy_var_1 vars) (happy_var_3 vars)
+		 (\vars inLoop inIfinLoop ->
+                               let (valL, nasL) = happy_var_1 vars inLoop inIfinLoop
+                                   (valR, nasR) = happy_var_3 vars inLoop inIfinLoop
+                               in  (LEq valL valR, Set.union nasL nasR)
 	)
 happyReduction_28 _ _ _  = notHappyAtAll 
 
@@ -1033,33 +1106,44 @@ happyReduction_29 (HappyAbsSyn10  happy_var_3)
 	_
 	(HappyAbsSyn10  happy_var_1)
 	 =  HappyAbsSyn9
-		 (\vars -> GEq (happy_var_1 vars) (happy_var_3 vars)
+		 (\vars inLoop inIfinLoop ->
+                               let (valL, nasL) = happy_var_1 vars inLoop inIfinLoop
+                                   (valR, nasR) = happy_var_3 vars inLoop inIfinLoop
+                               in  (GEq valL valR, Set.union nasL nasR)
 	)
 happyReduction_29 _ _ _  = notHappyAtAll 
 
 happyReduce_30 = happySpecReduce_1  10 happyReduction_30
 happyReduction_30 (HappyTerminal (Num happy_var_1))
 	 =  HappyAbsSyn10
-		 (\vars -> Number happy_var_1
+		 (\vars _ _ -> (Number happy_var_1, Set.empty)
 	)
 happyReduction_30 _  = notHappyAtAll 
 
 happyReduce_31 = happySpecReduce_1  10 happyReduction_31
 happyReduction_31 (HappyAbsSyn11  happy_var_1)
 	 =  HappyAbsSyn10
-		 (\vars ->
+		 (\vars inLoop inIfinLoop ->
                          case (happy_var_1 vars) of
                              var@(Var _) -> if assigned $ decl var
-                                              then Identifier var
-                                              else error ("reading variable '" ++ (name $ decl var) ++ "' before it was assigned")
+                                              then (Identifier var, Set.empty)
+                                              else if inIfinLoop
+                                                     then (Identifier var, Set.singleton $ name $ decl var)
+                                                     else error ("reading variable '" ++ (name $ decl var) ++ "' before it was assigned")
                              var@(ArrNum _ _) -> if assigned $ decl var
-                                                   then Identifier var
-                                                   else error ("reading from array '" ++ (name $ decl var) ++ "' before any of its elements was assigned")
+                                                   then (Identifier var, Set.empty)
+                                                   else if inIfinLoop
+                                                          then (Identifier var, Set.singleton $ name $ decl var)
+                                                          else error ("reading from array '" ++ (name $ decl var) ++ "' before any of its elements was assigned")
                              var@(ArrVar _ _) -> if assigned $ decl var
                                                    then if assigned $ indexDecl var
-                                                          then Identifier var
-                                                          else error ("reading variable '" ++ (name $ indexDecl var) ++ "' before it was assigned")
-                                                   else error ("reading from array '" ++ (name $ decl var) ++ "' before any of its elements was assigned")
+                                                          then (Identifier var, Set.empty)
+                                                          else if inIfinLoop
+                                                                 then (Identifier var, Set.singleton $ name $ indexDecl var)
+                                                                 else error ("reading variable '" ++ (name $ indexDecl var) ++ "' before it was assigned")
+                                                   else if inIfinLoop
+                                                          then (Identifier var, Set.singleton $ name $ decl var)
+                                                          else error ("reading from array '" ++ (name $ decl var) ++ "' before any of its elements was assigned")
 	)
 happyReduction_31 _  = notHappyAtAll 
 
@@ -1185,7 +1269,7 @@ happySeq = happyDontSeq
 
 
 parseError :: [Token] -> a
-parseError _ = error "Parse error"
+parseError _ = error "Syntax error"
 {-# LINE 1 "templates/GenericTemplate.hs" #-}
 {-# LINE 1 "templates/GenericTemplate.hs" #-}
 {-# LINE 1 "<built-in>" #-}

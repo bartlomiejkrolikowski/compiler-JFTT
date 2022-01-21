@@ -57,8 +57,8 @@ import qualified Data.Set as Set
 %%
 
 program :: { Program }
-      : VAR declarations BEGIN commands END { let vars = $2 in Program vars ($4 (fst vars) (snd vars) False False) }
-      | BEGIN commands END                  { let vars = (Map.empty, 0) in Program vars ($2 (fst vars) (snd vars) False False) }
+      : VAR declarations BEGIN commands END { let vars = $2; (cmds,newVars,_) = ($4 (fst vars) (snd vars) False False) in Program vars (cmds,newVars) }
+      | BEGIN commands END                  { let vars = (Map.empty, 0); (cmds,newVars,_) = ($2 (fst vars) (snd vars) False False) in Program vars (cmds,newVars) }
 
 declarations :: { (Map.Map String Variable, Int) }
       : declarations ',' pidentifier                     { let (decls, lowestUnusedAddress) = $1
@@ -91,16 +91,16 @@ commands :: { Variables -> Int -> Bool -> Bool -> ([Command], Variables, NotAssi
 
 command :: { Variables -> Int -> Bool -> Bool -> (Command, Variables, NotAssignedSet) }
       : identifier ASSIGN expression ';'                           { \vars unusedAddr inLoop inIfinLoop ->
-                                                                         let successfulResult assignId =
-                                                                             let (expr, nas) = $3 vars inLoop inIfinLoop
-                                                                             in  (Assign assignId expr, Map.adjust setAssigned (name . decl \$ assignId) vars, nas)
+                                                                         let successfulResult assignId = let (expr, nas) = $3 vars inLoop inIfinLoop
+                                                                                                         in  (Assign assignId expr, Map.adjust setAssigned (name . decl \$ assignId) vars, nas)
                                                                          in  case $1 vars of
                                                                                  Var (Iterator c _ _)    -> error ("cannot modify '" ++ c ++ "' by ASSIGN because it is an iterator")
-                                                                                 assignId@(ArrVar _ ind) -> if assigned ind
-                                                                                                              then successfulResult assignId
-                                                                                                              else if inIfinLoop -- jesli jestem w if, w petli to zmienna moze byc zainicjowana w innym warunku w poprzednim przebiegu
-                                                                                                                     then Set.insert (name ind) <\$> successfulResult assignId
-                                                                                                                     else error ("reading variable '" ++ name ind ++ "' before it was assigned")
+                                                                                 assignId@(ArrVar _ ind) -> let succAId = successfulResult assignId
+                                                                                                            in  if assigned ind
+                                                                                                                  then succAId
+                                                                                                                  else if inIfinLoop -- jesli jestem w if, w petli to zmienna moze byc zainicjowana w innym warunku w poprzednim przebiegu
+                                                                                                                         then Set.insert (name ind) <\$> succAId
+                                                                                                                         else error ("reading variable '" ++ name ind ++ "' before it was assigned")
                                                                                  assignId                -> successfulResult assignId }
       | IF condition THEN commands ELSE commands ENDIF             { \vars unusedAddr inLoop inIfinLoop ->
                                                                          let isInIfinLoop = inLoop || inIfinLoop -- albo juz jestem wewnatrz if w petli, albo tylko w petli i wchodze do if
@@ -116,7 +116,7 @@ command :: { Variables -> Int -> Bool -> Bool -> (Command, Variables, NotAssigne
       | WHILE condition DO commands ENDWHILE                       { \vars unusedAddr inLoop inIfinLoop ->
                                                                          if inIfinLoop
                                                                            then let (cond, nasC) = $2 vars inLoop inIfinLoop -- analogicznie jak dla pozostalych (nie moge byc bardziej w petli)
-                                                                                    (cmdsW, varsW, nasW) = $4 vars unusedAddr inLoop inIfinLoop -- po przejsciu przez while napewno nie bedzie mniej zainicjowanych
+                                                                                    (cmdsW, varsW, nasW) = $4 vars unusedAddr True inIfinLoop -- po przejsciu przez while napewno nie bedzie mniej zainicjowanych
                                                                                 in  (While cond cmdsW, varsW, Set.union nasC nasW)
                                                                            else let (cond, nasC) = $2 vars inLoop inIfinLoop -- warunek jest jeszcze poza petla
                                                                                     (cmdsW, varsW, nasW) = $4 vars unusedAddr True inIfinLoop -- po przejsciu przez while napewno nie bedzie mniej zainicjowanych
@@ -124,7 +124,7 @@ command :: { Variables -> Int -> Bool -> Bool -> (Command, Variables, NotAssigne
                                                                                 in  (While cond cmdsW, varsW, Set.union nasC stillNotAssigned) }
       | REPEAT commands UNTIL condition ';'                        { \vars unusedAddr inLoop inIfinLoop ->
                                                                          if inIfinLoop
-                                                                           then let (cmdsR, varsR, nasR) = $2 vars unusedAddr inLoop inIfinLoop -- po przejsciu przez repeat napewno nie bedzie mniej zainicjowanych + w warunku sa juz zainicjowane
+                                                                           then let (cmdsR, varsR, nasR) = $2 vars unusedAddr True inIfinLoop -- po przejsciu przez repeat napewno nie bedzie mniej zainicjowanych + w warunku sa juz zainicjowane
                                                                                     (cond, nasC) = $4 varsR inLoop inIfinLoop -- analogicznie jak dla pozostalych (nie moge byc bardziej w petli)
                                                                                 in  (Repeat cmdsR cond, varsR, Set.union nasR nasC)
                                                                            else let (cmdsR, varsR, nasR) = $2 vars unusedAddr True inIfinLoop -- po przejsciu przez repeat napewno nie bedzie mniej zainicjowanych + w warunku sa juz zainicjowane
@@ -138,7 +138,7 @@ command :: { Variables -> Int -> Bool -> Bool -> (Command, Variables, NotAssigne
                                                                                    then let (valFrom, nasFrom) = $4 vars inLoop inIfinLoop
                                                                                             (valTo, nasTo) = $6 vars inLoop inIfinLoop
                                                                                             localVars = Map.insert $2 (Iterator $2 True unusedAddr) vars
-                                                                                            (cmdsF, varsF, nasF) = $8 localVars (unusedAddr+2) inLoop inIfinLoop -- +2 bo pamietam jeszcze koniec;ponizej usuwam iterator
+                                                                                            (cmdsF, varsF, nasF) = $8 localVars (unusedAddr+2) True inIfinLoop -- +2 bo pamietam jeszcze koniec;ponizej usuwam iterator
                                                                                         in  (ForTo (Iterator $2 True unusedAddr) valFrom valTo cmdsF, Map.delete $2 varsF, Set.union nasFrom \$ Set.union nasTo nasF)
                                                                                    else let (valFrom, nasFrom) = $4 vars inLoop inIfinLoop -- konce zakresow sa obliczane jeszcze przed petla
                                                                                             (valTo, nasTo) = $6 vars inLoop inIfinLoop
@@ -154,7 +154,7 @@ command :: { Variables -> Int -> Bool -> Bool -> (Command, Variables, NotAssigne
                                                                                    then let (valFrom, nasFrom) = $4 vars inLoop inIfinLoop
                                                                                             (valTo, nasTo) = $6 vars inLoop inIfinLoop
                                                                                             localVars = Map.insert $2 (Iterator $2 True unusedAddr) vars
-                                                                                            (cmdsF, varsF, nasF) = $8 localVars (unusedAddr+2) inLoop inIfinLoop -- +2 bo pamietam jeszcze koniec;ponizej usuwam iterator
+                                                                                            (cmdsF, varsF, nasF) = $8 localVars (unusedAddr+2) True inIfinLoop -- +2 bo pamietam jeszcze koniec;ponizej usuwam iterator
                                                                                         in  (ForDownTo (Iterator $2 True unusedAddr) valFrom valTo cmdsF, Map.delete $2 varsF, Set.union nasFrom \$ Set.union nasTo nasF)
                                                                                    else let (valFrom, nasFrom) = $4 vars inLoop inIfinLoop -- konce zakresow sa obliczane jeszcze przed petla
                                                                                             (valTo, nasTo) = $6 vars inLoop inIfinLoop
@@ -170,66 +170,77 @@ command :: { Variables -> Int -> Bool -> Bool -> (Command, Variables, NotAssigne
                                                                                  readId@(ArrVar _ ind) -> if assigned ind
                                                                                                             then successfulResult readId
                                                                                                             else if inIfinLoop -- jesli jestem w if, w petli to zmienna moze byc zainicjowana w innym warunku w poprzednim przebiegu
-                                                                                                                     then Set.insert (name ind) <\$> successfulResult assignId
+                                                                                                                     then Set.insert (name ind) <\$> successfulResult readId
                                                                                                                      else error ("reading variable '" ++ name ind ++ "' before it was assigned")
                                                                                  readId                -> successfulResult readId }
       | WRITE value ';'                                            { \vars _ inLoop inIfinLoop -> let (val, nas) = ($2 vars inLoop inIfinLoop) in (Write val, vars, nas) }
 
 expression :: { Variables -> Bool -> Bool -> (Expression, NotAssignedSet) }
       : value             { \vars inLoop inIfinLoop  -> let (val, nas) = ($1 vars inLoop inIfinLoop) in (Single val, nas) }
-      | value PLUS value  { \vars inLoop inIfinLoop -> let (valL, nasL) = $1 vars inLoop inIfinLoop
-                                                           (valR, nasR) = $3 vars inLoop inIfinLoop
-                                                       in  (Plus valL valR, Set.union nasL nasR) }
-      | value MINUS value { \vars inLoop inIfinLoop -> let (valL, nasL) = $1 vars inLoop inIfinLoop
-                                                           (valR, nasR) = $3 vars inLoop inIfinLoop
-                                                       in  (Minus valL valR, Set.union nasL nasR) }
-      | value TIMES value { \vars inLoop inIfinLoop -> let (valL, nasL) = $1 vars inLoop inIfinLoop
-                                                           (valR, nasR) = $3 vars inLoop inIfinLoop
-                                                       in  (Times valL valR, Set.union nasL nasR) }
-      | value DIV value   { \vars inLoop inIfinLoop -> let (valL, nasL) = $1 vars inLoop inIfinLoop
-                                                           (valR, nasR) = $3 vars inLoop inIfinLoop
-                                                       in  (Div valL valR, Set.union nasL nasR) }
-      | value MOD value   { \vars inLoop inIfinLoop -> let (valL, nasL) = $1 vars inLoop inIfinLoop
-                                                           (valR, nasR) = $3 vars inLoop inIfinLoop
-                                                       in  (Mod valL valR, Set.union nasL nasR) }
+      | value PLUS value  { \vars inLoop inIfinLoop ->
+                                let (valL, nasL) = $1 vars inLoop inIfinLoop
+                                    (valR, nasR) = $3 vars inLoop inIfinLoop
+                                in  (Plus valL valR, Set.union nasL nasR) }
+      | value MINUS value { \vars inLoop inIfinLoop ->
+                                let (valL, nasL) = $1 vars inLoop inIfinLoop
+                                    (valR, nasR) = $3 vars inLoop inIfinLoop
+                                in  (Minus valL valR, Set.union nasL nasR) }
+      | value TIMES value { \vars inLoop inIfinLoop ->
+                                let (valL, nasL) = $1 vars inLoop inIfinLoop
+                                    (valR, nasR) = $3 vars inLoop inIfinLoop
+                                in  (Times valL valR, Set.union nasL nasR) }
+      | value DIV value   { \vars inLoop inIfinLoop ->
+                                let (valL, nasL) = $1 vars inLoop inIfinLoop
+                                    (valR, nasR) = $3 vars inLoop inIfinLoop
+                                in  (Div valL valR, Set.union nasL nasR) }
+      | value MOD value   { \vars inLoop inIfinLoop ->
+                                let (valL, nasL) = $1 vars inLoop inIfinLoop
+                                    (valR, nasR) = $3 vars inLoop inIfinLoop
+                                in  (Mod valL valR, Set.union nasL nasR) }
 
 condition :: { Variables -> Bool -> Bool -> (Condition, NotAssignedSet) }
-      : value EQ value  { \vars inLoop inIfinLoop -> let (valL, nasL) = $1 vars inLoop inIfinLoop
-                                                         (valR, nasR) = $3 vars inLoop inIfinLoop
-                                                     in  (Eq valL valR, Set.union nasL nasR) }
-      | value NEQ value { \vars inLoop inIfinLoop -> let (valL, nasL) = $1 vars inLoop inIfinLoop
-                                                         (valR, nasR) = $3 vars inLoop inIfinLoop
-                                                     in  (NEq valL valR, Set.union nasL nasR) }
-      | value LE value  { \vars inLoop inIfinLoop -> let (valL, nasL) = $1 vars inLoop inIfinLoop
-                                                         (valR, nasR) = $3 vars inLoop inIfinLoop
-                                                     in  (Le valL valR, Set.union nasL nasR) }
-      | value GE value  { \vars inLoop inIfinLoop -> let (valL, nasL) = $1 vars inLoop inIfinLoop
-                                                         (valR, nasR) = $3 vars inLoop inIfinLoop
-                                                     in  (Ge valL valR, Set.union nasL nasR) }
-      | value LEQ value { \vars inLoop inIfinLoop -> let (valL, nasL) = $1 vars inLoop inIfinLoop
-                                                         (valR, nasR) = $3 vars inLoop inIfinLoop
-                                                     in  (LEq valL valR, Set.union nasL nasR) }
-      | value GEQ value { \vars inLoop inIfinLoop -> let (valL, nasL) = $1 vars inLoop inIfinLoop
-                                                         (valR, nasR) = $3 vars inLoop inIfinLoop
-                                                     in  (GEq valL valR, Set.union nasL nasR) }
+      : value EQ value  { \vars inLoop inIfinLoop ->
+                               let (valL, nasL) = $1 vars inLoop inIfinLoop
+                                   (valR, nasR) = $3 vars inLoop inIfinLoop
+                               in  (Eq valL valR, Set.union nasL nasR) }
+      | value NEQ value { \vars inLoop inIfinLoop ->
+                               let (valL, nasL) = $1 vars inLoop inIfinLoop
+                                   (valR, nasR) = $3 vars inLoop inIfinLoop
+                               in  (NEq valL valR, Set.union nasL nasR) }
+      | value LE value  { \vars inLoop inIfinLoop ->
+                               let (valL, nasL) = $1 vars inLoop inIfinLoop
+                                   (valR, nasR) = $3 vars inLoop inIfinLoop
+                               in  (Le valL valR, Set.union nasL nasR) }
+      | value GE value  { \vars inLoop inIfinLoop ->
+                               let (valL, nasL) = $1 vars inLoop inIfinLoop
+                                   (valR, nasR) = $3 vars inLoop inIfinLoop
+                               in  (Ge valL valR, Set.union nasL nasR) }
+      | value LEQ value { \vars inLoop inIfinLoop ->
+                               let (valL, nasL) = $1 vars inLoop inIfinLoop
+                                   (valR, nasR) = $3 vars inLoop inIfinLoop
+                               in  (LEq valL valR, Set.union nasL nasR) }
+      | value GEQ value { \vars inLoop inIfinLoop ->
+                               let (valL, nasL) = $1 vars inLoop inIfinLoop
+                                   (valR, nasR) = $3 vars inLoop inIfinLoop
+                               in  (GEq valL valR, Set.union nasL nasR) }
 
 value :: { Variables -> Bool -> Bool -> (Value, NotAssignedSet) }
-      : num        { \vars _ _ -> Number $1 }
+      : num        { \vars _ _ -> (Number $1, Set.empty) }
       | identifier { \vars inLoop inIfinLoop ->
                          case ($1 vars) of
                              var@(Var _) -> if assigned \$ decl var
-                                              then (Identifier var, Set.Empty)
+                                              then (Identifier var, Set.empty)
                                               else if inIfinLoop
                                                      then (Identifier var, Set.singleton \$ name \$ decl var)
                                                      else error ("reading variable '" ++ (name \$ decl var) ++ "' before it was assigned")
                              var@(ArrNum _ _) -> if assigned \$ decl var
-                                                   then (Identifier var, Set.Empty)
+                                                   then (Identifier var, Set.empty)
                                                    else if inIfinLoop
                                                           then (Identifier var, Set.singleton \$ name \$ decl var)
                                                           else error ("reading from array '" ++ (name \$ decl var) ++ "' before any of its elements was assigned")
                              var@(ArrVar _ _) -> if assigned \$ decl var
                                                    then if assigned \$ indexDecl var
-                                                          then (Identifier var, Set.Empty)
+                                                          then (Identifier var, Set.empty)
                                                           else if inIfinLoop
                                                                  then (Identifier var, Set.singleton \$ name \$ indexDecl var)
                                                                  else error ("reading variable '" ++ (name \$ indexDecl var) ++ "' before it was assigned")

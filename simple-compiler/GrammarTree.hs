@@ -12,7 +12,7 @@ module GrammarTree
 , Identifier(..)
 , setAssigned
 , chooseAssigned
-, assertAssigned
+, assertAssignment
 ) where
 
 import qualified Data.Map as Map
@@ -42,11 +42,11 @@ chooseAssigned iter1@(Iterator _ _ _) (Iterator _ _ _) = iter1 -- iterator sie n
 chooseAssigned _ _ = error "one key with two different values"
 
 -- sprawdzam czy wszystkie czytane w if-ach zmienne zostaly zainicjowane przed koncem petli
-assertAssigned :: Variables -> NotAssignedSet -> NotAssignedSet
-assertAssigned vars nas = let stillNotAssigned = snd $ Set.foldr insertIfNotAssigned (vars, Set.empty) nas
-                          in  if Set.size stillNotAssigned == 0
-                                then stillNotAssigned -- wszystko w koncu zainicjowane
-                                else error ("those variables are read before they were assigned: " ++ show (Set.toList stillNotAssigned)) -- wyswietlam niezainicjowane
+assertAssignment :: Variables -> NotAssignedSet -> NotAssignedSet
+assertAssignment vars nas = let stillNotAssigned = snd $ Set.foldr insertIfNotAssigned (vars, Set.empty) nas
+                            in  if Set.size stillNotAssigned == 0
+                                  then stillNotAssigned -- wszystko w koncu zainicjowane
+                                  else error ("those variables are read before they were assigned: " ++ show (Set.toList stillNotAssigned)) -- wyswietlam niezainicjowane
     where insertIfNotAssigned :: String -> (Variables, NotAssignedSet) -> (Variables, NotAssignedSet)
           insertIfNotAssigned varName acc@(varsAcc, nasAcc) =
               case Map.lookup varName varsAcc of
