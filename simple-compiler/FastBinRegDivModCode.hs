@@ -23,7 +23,7 @@ initDivisor = [ Swap Rd
               , Jump 4   -- Rd nie jest 0 - skok do zwyklego dzielenia
               , Reset Ra -- vvv (tu: Rd == 0)
               , Reset Rb -- ^^^ wynik dzielenia przez 0 to (0,0)
-              , Jump (8 + length initDivMod + length loopDivMod) -- przeskakuje na koniec
+              , Jump (8 + length initDivMod + length loopDivMod + length endDivMod) -- przeskakuje na koniec
               , Jneg 3   -- skok do przypadku Rd < 0
               , Reset Rc -- zapisanie do Rc, ze Rd > 0 (Rc <- 0)
               , Jump 4   -- skok do dzielenia
@@ -56,11 +56,12 @@ initDivMod = [ Reset Rb  -- vvv
              , Reset Ra
              , Sub Rd
              , Swap Rh   -- ^^^ przypadek brzegowy dla 0: wynik = (0,0) (Rh == mod - Rd) (koszt: 14)
-             , Jump 5
-             , Reset Rg  -- vvv (tu: Ra == -1)
+             , Jump 6
+             , Dec Ra    -- vvv (tu: Ra == -1 <=> Ra+1 == 0)
+             , Reset Rg
              , Dec Rg
              , Reset Rh
-             , Dec Rh    -- ^^^ przypadek brzegowy dla -1: wynik = (-1, Rd-1) (Rh == mod - Rd) (koszt: 4)
+             , Dec Rh    -- ^^^ przypadek brzegowy dla -1: wynik = (-1, Rd-1) (Rh == mod - Rd) (koszt: 5)
              , Swap Rf   -- vvv
              , Reset Ra
              , Sub Re
@@ -75,7 +76,7 @@ initDivMod = [ Reset Rb  -- vvv
 --       (uwaga: tylko dla Rd > 0)
 loopDivMod :: Code
 loopDivMod = [ Swap Re    -- koniec jesli przetworzylem juz najnizszy bit
-             , Jzero 27
+             , Jzero 28
              , Swap Re    -- vvv (w Ra jest poprzednio przetwarzany bit)
              , Shift Re
              , Swap Rb
@@ -88,9 +89,10 @@ loopDivMod = [ Swap Re    -- koniec jesli przetworzylem juz najnizszy bit
              , Swap Rg
              , Swap Rh
              , Shift Rh
-             , Swap Rh    -- ^^^ Rg <- 2*Rg, Rh <- 2*Rh (koszt: 16)
+             , Add Rd
+             , Swap Rh    -- ^^^ Rg <- 2*Rg, Rh <- 2*Rh + Rd (== 2*mod - Rd) (koszt: 26)
              , Reset Ra   -- vvv
-             , Add Ra     -- ^^^ kopiuje wynik do Ra (koszt: 11)
+             , Add Rb     -- ^^^ kopiuje wynik do Ra (koszt: 11)
              , Dec Re     -- vvv
              , Inc Rf     -- ^^^ update dlugosci liczby (koszt: 2)
              , Shift Rf   -- pobieram nastepny bit (koszt: 5)
@@ -101,7 +103,7 @@ loopDivMod = [ Swap Re    -- koniec jesli przetworzylem juz najnizszy bit
              , Sub Rd     -- vvv (Rh >= 0)
              , Inc Rg     -- ^^^ mod przekroczyl Rd-1 (mod - Rd == Rh >= 0) - obcinam do [0,Rd) (koszt: 11)
              , Swap Rh    -- tu: w Ra jest wlasnie przetworzony bit
-             , Jump (-27)
+             , Jump (-28)
              ]
 
 -- dostosowuje wynik w zaleznosci od znaku Rd i przenosi wyniki: Ra <- div = Rg, Rb <- mod = Rh + Rd
@@ -109,7 +111,7 @@ endDivMod :: Code
 endDivMod = [ Swap Rh  -- vvv
             , Add Rd   -- ^^^ wstawienie mod do Ra (koszt: 11)
             , Swap Rc  -- odczytanie oryginalnego znaku Rd
-            , Jzero 10
+            , Jzero 9
             , Swap Rc  -- tu: Rd < 0
             , Jzero 3
             , Inc Rg   -- vvv -div <- -div+1 (tu: mod nie jest 0, czyli bylo zaokraglone w dol == zaokraglenie w gore dla ujemnego Rd)
@@ -117,7 +119,8 @@ endDivMod = [ Swap Rh  -- vvv
             , Swap Rb  -- vvv
             , Reset Ra
             , Sub Rg   -- ^^^ zapisanie mod (z Ra) do Rb i div (w Rg jest -div) do Ra (koszt: 12)
-            , Jump 3   -- skok koncowy
-            , Swap Rb  -- vvv
-            , Swap Rg  -- ^^^ zapisanie mod (z Ra) do Rb i div (z Rg) do Ra (koszt: 2)
+            , Jump 4   -- skok koncowy
+            , Swap Rc  -- vvv
+            , Swap Rb
+            , Swap Rg  -- ^^^ zapisanie mod (z Ra) do Rb i div (z Rg) do Ra (koszt: 3)
             ]

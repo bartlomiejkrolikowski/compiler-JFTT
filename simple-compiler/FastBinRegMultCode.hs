@@ -22,7 +22,7 @@ putMinInRa = [ Reset Rb -- vvv
              , Swap Rb
              , Add Rb   -- ^^^ skopiowanie Ra do Rb (koszt: 12)
              , Sub Rd   -- porownanie Ra z Rd (koszt: 10)
-             , Jzero 15 -- przeskok do wyjscia (sa rowne)
+             , Jzero 14 -- przeskok do wyjscia (sa rowne)
              , Jneg 6   -- przeskok dla Ra < Rd
              , Reset Ra -- vvv tu: Ra > Rd
              , Sub Rb   -- ^^^ zapisanie -Rb do Ra (koszt: 11)
@@ -62,7 +62,7 @@ initMult = [ Reset Rb -- vvv
 loopMult :: Code
 loopMult = [ Jzero 22   -- wyjscie z petli (warunek: Ra == 0 - w Rc jest wynik)
            , Inc Ra
-           , Jzero 16   -- wyjscie z petli (warunek: Ra == -1 - trzeba od Rc odjac Rd: -1*Rd = -Rd)
+           , Jzero 17   -- wyjscie z petli (warunek: Ra == -1 - trzeba od Rc odjac Rd: -1*Rd = -Rd)
            , Dec Ra     -- tu: Ra nie jest -1 ani 0
            , Shift Rf   -- vvv Ra /= 2
            , Shift Re   --     Ra *= 2

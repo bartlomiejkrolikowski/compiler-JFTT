@@ -204,7 +204,7 @@ forDownToLoop iter cmdsBeginRng cmdsEndRng cmdsLoop = forLoop iter ((address $ d
 -- kompiluje instrukcje read (uwaga: funkcja ma inna nazwe, bo read juz istnieje)
 --    pobiera identyfikator, do ktorego nalezy czytac
 readAndStore :: Identifier -> (Code, Int)
-readAndStore ident = assign ident (reverse codeRead, length codeRead)
+readAndStore ident = assign ident $ appendLength $ reverse codeRead
     where codeRead = [ Get ] -- czyta wartosc do Ra
 
 -- kompiluje instrukcje write
