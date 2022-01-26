@@ -1,15 +1,15 @@
 {
 module Grammar.Parse
 ( parse
-, Program(..)
-, Declarations(..)
-, Declaration(..)
-, Commands(..)
-, Command(..)
-, Expression(..)
-, Condition(..)
-, Value(..)
-, Identifier(..)
+-- , Program(..)
+-- , Declarations(..)
+-- , Declaration(..)
+-- , Commands(..)
+-- , Command(..)
+-- , Expression(..)
+-- , Condition(..)
+-- , Value(..)
+-- , Identifier(..)
 ) where
 
 import Tokens
@@ -82,8 +82,8 @@ command :: { Command }
       | IF condition THEN commands ENDIF                           { If $2 (reverse $4) }
       | WHILE condition DO commands ENDWHILE                       { While $2 (reverse $4) }
       | REPEAT commands UNTIL condition ';'                        { Repeat (reverse $2) $4 }
-      | FOR pidentifier FROM value TO value DO commands ENDFOR     { ForTo { iterFT = Iterator $2, fromT = $4, toT = $6, commandsT = (reverse $8) } }
-      | FOR pidentifier FROM value DOWNTO value DO commands ENDFOR { ForDownTo { iterFD = Iterator $2, fromD = $4, toD = $6, commandsD = (reverse $8) } }
+      | FOR pidentifier FROM value TO value DO commands ENDFOR     { ForTo { iterFT = Iterator { iterName = $2 }, fromT = $4, toT = $6, commandsT = (reverse $8) } }
+      | FOR pidentifier FROM value DOWNTO value DO commands ENDFOR { ForDownTo { iterFD = Iterator { iterName = $2 }, fromD = $4, toD = $6, commandsD = (reverse $8) } }
       | READ identifier ';'                                        { Read $2 }
       | WRITE value ';'                                            { Write $2 }
 
@@ -108,9 +108,9 @@ value :: { Value }
       | identifier { Identifier $1 }
 
 identifier :: { Identifier }
-      : pidentifier                     { Var { name = $1 } }
-      | pidentifier '[' pidentifier ']' { ArrVar { name = $1, indexVar = $3 } }
-      | pidentifier '[' num ']'         { ArrNum { name = $1, indexNum = $3 } }
+      : pidentifier                     { Var { idName = $1 } }
+      | pidentifier '[' pidentifier ']' { ArrVar { idName = $1, indexVar = $3 } }
+      | pidentifier '[' num ']'         { ArrNum { idName = $1, indexNum = $3 } }
 
 {
 parseError :: [Token] -> a

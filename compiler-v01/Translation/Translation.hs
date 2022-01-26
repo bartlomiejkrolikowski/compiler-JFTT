@@ -1,14 +1,14 @@
-module Translation
+module Translation.Translation
 ( translateProgram
 ) where
 
 import qualified Data.List as List
-import GrammarTree
-import Instructions
+import Grammar.Data
+import Translation.Instructions
 
 -- tlumaczenie drzewa wyprowadzenia (z atrybutami) na ciag instrukcji maszyny wirtualnej
 translateProgram :: Program -> (Code, Int)
-translateProgram (Program _ (commands,_)) = let (cmds, len) = translateCommands commands
+translateProgram (Program _ commands) = let (cmds, len) = translateCommands commands
                                             in  (reverse (stopExecution ++ cmds), 1 + len)
     where stopExecution = [ Halt ] -- zatrzymuje program
 
@@ -27,9 +27,9 @@ translateCommand (While cond cmds) = let (cmdsCond, condType) = translateConditi
                                      in  whileLoop condType cmdsCond (translateCommands cmds)
 translateCommand (Repeat cmds cond) = let (cmdsCond, condType) = translateCondition cond
                                       in  repeatLoop condType cmdsCond (translateCommands cmds)
-translateCommand (ForTo iter from to cmds) =
+translateCommand (ForTo (Iterator iter) from to cmds) =
     forToLoop (Var iter) (translateValue from) (translateValue to) (translateCommands cmds) -- na potrzeby funkcji traktuje iter jak zmienna po lewej stronie przypisania
-translateCommand (ForDownTo iter from to cmds) =
+translateCommand (ForDownTo (Iterator iter) from to cmds) =
     forDownToLoop (Var iter) (translateValue from) (translateValue to) (translateCommands cmds) -- na potrzeby funkcji traktuje iter jak zmienna po lewej stronie przypisania
 translateCommand (Read ident) = readAndStore ident
 translateCommand (Write val) = writeVal (translateValue val)

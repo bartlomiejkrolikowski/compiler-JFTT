@@ -1,4 +1,4 @@
-module Expressions
+module Translation.Expressions
 ( computeNumber
 , storeValIn
 , loadValFrom
@@ -26,10 +26,12 @@ module Expressions
 , geqCond
 ) where
 
-import Code
-import GrammarTree
-import FastBinRegMultCode
-import FastBinRegDivModCode
+import Translation.Code
+import Grammar.Data
+import Translation.FastBinRegMultCode
+import Translation.FastBinRegDivModCode
+
+address = undefined
 
 -- wyrazenia zwracaja komendy (+ ich liczba) zwracajace wartosc w Ra
 -- warunki zwracaja dodatkowo rodzaj warunku (jako CondType)

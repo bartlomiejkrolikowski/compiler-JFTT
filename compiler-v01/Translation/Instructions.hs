@@ -1,4 +1,4 @@
-module Instructions
+module Translation.Instructions
 ( Code(..)
 , Instruction(..)
 , Register(..)
@@ -40,11 +40,14 @@ module Instructions
 , geqCond
 ) where
 
-import GrammarTree
-import Expressions
-import Code
+import Grammar.Data
+import Translation.Expressions
+import Translation.Code
 
 data Direction = Up | Down deriving (Eq,Show)
+
+address = undefined
+decl = undefined
 
 -- instrukcje dostawiaja komendy na poczatek (na koniec nalezy odwrocic Code)
 -- nie zostawiaja po sobie rejestrow w uzyciu ("chowaja" wszystko do pamieci)

@@ -1,10 +1,11 @@
 import Tokens
-import GrammarTree
-import Grammar
-import Translation
+import Grammar.Data
+import Grammar.Parse
+import Translation.Code
+import Translation.Translation
 import System.IO
 import System.Environment
-import qualified Data.Map as Map
+--import qualified Data.Map as Map
 
 main = do
          args <- getArgs
@@ -13,7 +14,19 @@ main = do
          hSetEncoding handleSource utf8
          hSetEncoding handleMachCode utf8
          contents <- hGetContents handleSource
-         let (machCode,_) = translateProgram $ parse $ alexScanTokens contents
-         hPutStr handleMachCode $ unlines $ map show machCode
+         saveOrError handleMachCode $ compile $ parse $ alexScanTokens contents
          hClose handleSource
          hClose handleMachCode
+
+checkCorrectness = undefined
+
+-- zwraca albo blad albo skompilowany program
+compile :: Program -> Either String Code
+compile prog = do
+                 checkCorrectness prog
+                 return $ fst $ translateProgram prog
+
+-- wypisuje wiadomosc o bledzie lub zapisuje program do pliku
+saveOrError :: Handle -> Either String Code -> IO ()
+saveOrError _ (Left msg) = putStrLn ("Błąd: " ++ msg)
+saveOrError h (Right machCode) = hPutStr h $ unlines $ map show machCode

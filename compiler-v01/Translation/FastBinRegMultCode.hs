@@ -1,8 +1,8 @@
-module FastBinRegMultCode
+module Translation.FastBinRegMultCode
 ( fastBinRegMultCode
 ) where
 
-import Code
+import Translation.Code
 
 -- FastBinRegMultCode.hs
 -- Bartlomiej Krolikowski

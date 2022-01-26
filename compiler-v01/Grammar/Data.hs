@@ -2,6 +2,7 @@ module Grammar.Data
 ( Program(..)
 , Declarations(..)
 , Declaration(..)
+, Iterator(..)
 , Commands(..)
 , Command(..)
 , Expression(..)
@@ -10,13 +11,13 @@ module Grammar.Data
 , Identifier(..)
 ) where
 
-data Program = Program Declarations (Commands, Variables) deriving (Eq,Show)
+data Program = Program Declarations Commands deriving (Eq,Show)
 type Declarations = [Declaration]
 data Declaration = SingleVar { name::String } |
-                   Array { name::String, begin::Int, end::Int } |
+                   Array { name::String, begin::Int, end::Int }
                    deriving (Eq,Show)
 
-data Iterator = Iterator { name::String } deriving (Eq,Show)
+data Iterator = Iterator { iterName::String } deriving (Eq,Show)
 
 type Commands = [Command]
 data Command =
@@ -50,7 +51,7 @@ data Condition =
   deriving (Eq,Show)
 
 data Value = Number Int | Identifier Identifier deriving (Eq,Show)
-data Identifier = Var { name::String } |
-                  ArrNum { name::String, indexInt::Int } |
-                  ArrVar { name::String, indexVar::String }
+data Identifier = Var { idName::String } |
+                  ArrNum { idName::String, indexNum::Int } |
+                  ArrVar { idName::String, indexVar::String }
                   deriving (Eq,Show)

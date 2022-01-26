@@ -1,4 +1,4 @@
-module Code
+module Translation.Code
 ( Code(..)
 , Instruction(..)
 , Register(..)
