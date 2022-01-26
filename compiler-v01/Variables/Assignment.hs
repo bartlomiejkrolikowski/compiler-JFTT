@@ -7,15 +7,11 @@ module Variables.Assignment
 import Variables.Data
 import Grammar.Data
 import qualified Data.Set as Set
+import qualified Data.Map as Map
 import qualified Data.List as List
 
 type Iterators = Set.Set String
-type Uninitialized = Set.Set Variables
-
--- zwraca Just _ jesli ktorykolwiek argument jest Just _
-getJust :: Maybe a -> Maybe a -> Maybe a
-getJust (Just a) _ = Just a
-getJust Nothing b = b
+--type Uninitialized = Set.Set String
 
 -- sprawdza czy nie ma przypisan do iteratora
 -- jesli sa to zwraca informacje dla uzytkownika o rodzaju bledu
@@ -24,112 +20,102 @@ getNotAssignable = cmdsGetNotAssignable Set.empty
 
 -- jak wyzej
 cmdsGetNotAssignable :: Iterators -> Commands -> Either String ()
-cmdsGetNotAssignable iters cmds = List.foldl' (\ errAcc cmd -> do errAcc; cmdGetNotAssignable iters cmd) Nothing cmds
+cmdsGetNotAssignable iters cmds = List.foldl' (\ errAcc cmd -> do errAcc; cmdGetNotAssignable iters cmd) (Right ()) cmds
 -- do ... -- Either String to monada -- (do a; b) jest rownowazne (a >>= (\_ -> b)) -- definicja (>>=):
 --                                                                                         Left l >>= f = Left l
 --                                                                                         Right r >>= f = f r
 
 -- jak wyzej
 cmdGetNotAssignable :: Iterators -> Command -> Either String ()
-cmdGetNotAssignable iters (Assign ident _) = if Set.notMember (name ident) iters
+cmdGetNotAssignable iters (Assign ident _) = if Set.notMember (idName ident) iters
                                                then Right ()
-                                               else Left ("cannot modify '" ++ (name ident) ++ "' by ASSIGN because it is an iterator")
-cmdGetNotAssignable iters (Read ident) = if Set.notMember (name ident) iters
+                                               else Left ("cannot modify '" ++ (idName ident) ++ "' by ASSIGN because it is an iterator")
+cmdGetNotAssignable iters (Read ident) = if Set.notMember (idName ident) iters
                                            then Right ()
-                                           else Left ("cannot modify '" ++ (name ident) ++ "' by READ because it is an iterator")
+                                           else Left ("cannot modify '" ++ (idName ident) ++ "' by READ because it is an iterator")
 cmdGetNotAssignable _ _ = Right ()
 
 -- inicjalizacja
 
--- informacja o tym, czy jestem w if wewnatrz jakiejkolwiek petli
--- (wtedy inicjalizacja moze byc zapisana ponizej, a wykonac sie wczesniej, zaleznie od warunku)
-data Context = Global | Loop | IfInLoop deriving (Eq,Show)
+-- usuwa wszystkie zmienne zapisywane w cmds z vars
+deleteVars :: Commands -> Variables -> Variables
+deleteVars cmds vars = List.foldl' cmdDeleteVar vars cmds
+    where cmdDeleteVar varAcc (Assign ident _) = Map.delete (idName ident) varAcc
+          cmdDeleteVar varAcc (IfElse _ cmdsT cmdsF) = Map.intersection (deleteVars cmdsT varAcc) (deleteVars cmdsF varAcc)
+          cmdDeleteVar varAcc (If _ cmdsT) = deleteVars cmdsT varAcc
+          cmdDeleteVar varAcc (While _ cmds) = deleteVars cmds varAcc
+          cmdDeleteVar varAcc (Repeat cmds _) = deleteVars cmds varAcc
+          cmdDeleteVar varAcc (ForTo _ _ _ cmds) = deleteVars cmds varAcc
+          cmdDeleteVar varAcc (ForDownTo _ _ _ cmds) = deleteVars cmds varAcc
+          cmdDeleteVar varAcc (Read ident) = Map.delete (idName ident) varAcc
+          cmdDeleteVar varAcc (Write _) = varAcc
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
--- sprawdza czy kazda czytana zmienna zostala zainicjowana
+-- sprawdza czy kazda zmienna zostala zainicjowana przed uzyciem
 -- jesli nie to zwraca informacje dla uzytkownika o rodzaju bledu
--- jesli tak to zwraca zbior niezainicjowanych (niewykorzystanych) zmiennych
--- (pobiera zbior niezainicjowanych zmiennych)
 getUninitialized :: Variables -> Commands -> Either String Variables
-getUninitialized vars cmds = List.foldl' (\ errAcc cmd -> errAcc >>= cmdGetUninitialized Global cmd) vars cmds
+getUninitialized vars cmds = cmdsGetUninit cmds vars
+
+-- nie przewiduje czy dany warunek jest spelniony, wiec dopuszczam niezainicjowane zmienne w if i petlach
+
+-- szukam zmiennych niezainicjowanych przed uzyciem i zapisuje informacje o bledzie jesli znajde
+cmdsGetUninit :: Commands -> Variables -> Either String Variables
+cmdsGetUninit cmds vars = List.foldl' (\ errAcc cmd -> errAcc >>= cmdGetUninit cmd) (Right vars) cmds
 
 -- jak wyzej
-cmdsGetUninitialized :: Context -> Command -> Variables -> Either String Variables
-cmdsGetUninitialized ctx cmds vars = getUninitialized ctx vars cmds
+cmdGetUninit :: Command -> Variables -> Either String Variables
+cmdGetUninit (Assign ident expr) vars = do idGetUninit ident vars
+                                           exGetUninit expr vars
+                                           return $ Map.delete (idName ident) vars
+cmdGetUninit (IfElse cond cmdsT cmdsF) vars = do condGetUninit cond vars -- nie sprawdzam wewnatrz if
+                                                 return $ deleteVars cmdsT $ deleteVars cmdsF vars
+cmdGetUninit (If cond cmdsT) vars = do condGetUninit cond vars -- nie sprawdzam wewnatrz if
+                                       return $ deleteVars cmdsT vars
+cmdGetUninit (While cond cmds) vars = do condGetUninit cond vars -- nie sprawdzam wewnatrz while
+                                         return $ deleteVars cmds vars
+cmdGetUninit (Repeat cmds cond) vars = condGetUninit cond $ deleteVars cmds vars -- nie sprawdzam wewnatrz repeat
+cmdGetUninit (ForTo _ _ _ cmds) vars = return $ deleteVars cmds vars -- nie sprawdzam wewnatrz for
+cmdGetUninit (ForDownTo _ _ _ cmds) vars = return $ deleteVars cmds vars -- nie sprawdzam wewnatrz for
+cmdGetUninit (Read ident) vars = do idGetUninit ident vars
+                                    return $ Map.delete (idName ident) vars
+cmdGetUninit (Write val) vars = valGetUninit val vars
 
 -- jak wyzej
-cmdGetUninitialized :: Context -> Command -> Variables -> Either String Variables
-cmdGetUninitialized ctx (Assign ident expr) vars = do idGetUninitialized ctx ident vars
-                                                      exGetUninitialized ctx expr vars
-                                                      return $ Map.delete (idName ident) vars -- ident jest juz zainicjowany
-cmdGetUninitialized ctx (IfElse cond cmdsT cmdsF) vars = do condGetUninitialized cond vars
-                                                        tVars <- getUninitialized cmdsT vars
-                                                        fVars <- getUninitialized cmdsF vars
-                                                        return $ Map.intersection tVars fVars
-                                                        -- uznaje ze zmienna jest zainicjowana jesli jest zainicjowana w ktorymkolwiek przypadku
-cmdGetUninitialized ctx (If cond cmdsT) vars = do condGetUninitialized cond vars; getUninitialized cmdsT vars -- po if napewno nie ma mniej zainicjowanych
-cmdGetUninitialized ctx (While cond cmds) vars = do condGetUninitialized cond vars
-                                                getUninitialized cmds vars
-                                                if vars
+exGetUninit :: Expression -> Variables -> Either String Variables
+exGetUninit (Single val) vars = valGetUninit val vars
+exGetUninit (Plus valL valR) vars = do valGetUninit valL vars; valGetUninit valR vars
+exGetUninit (Minus valL valR) vars = do valGetUninit valL vars; valGetUninit valR vars
+exGetUninit (Times valL valR) vars = do valGetUninit valL vars; valGetUninit valR vars
+exGetUninit (Div valL valR) vars = do valGetUninit valL vars; valGetUninit valR vars
+exGetUninit (Mod valL valR) vars = do valGetUninit valL vars; valGetUninit valR vars
 
+-- jak wyzej
+condGetUninit :: Condition -> Variables -> Either String Variables
+condGetUninit (Eq valL valR) vars = do valGetUninit valL vars; valGetUninit valR vars
+condGetUninit (NEq valL valR) vars = do valGetUninit valL vars; valGetUninit valR vars
+condGetUninit (Le valL valR) vars = do valGetUninit valL vars; valGetUninit valR vars
+condGetUninit (Ge valL valR) vars = do valGetUninit valL vars; valGetUninit valR vars
+condGetUninit (LEq valL valR) vars = do valGetUninit valL vars; valGetUninit valR vars
+condGetUninit (GEq valL valR) vars = do valGetUninit valL vars; valGetUninit valR vars
 
+-- jak wyzej
+valGetUninit :: Value -> Variables -> Either String Variables
+valGetUninit (Number _) vars = Right vars
+valGetUninit (Identifier (Var name)) vars = singVarGetUninit name vars
+valGetUninit (Identifier (ArrNum name _)) vars = arrGetUninit name vars
+valGetUninit (Identifier (ArrVar name indName)) vars = do arrGetUninit name vars
+                                                          singVarGetUninit indName vars
 
+-- jak wyzej, ale na potreby zapisywania
+idGetUninit :: Identifier -> Variables -> Either String Variables
+idGetUninit (ArrVar _ indName) vars = singVarGetUninit indName vars
+idGetUninit _ vars = Right vars
 
+singVarGetUninit :: String -> Variables -> Either String Variables
+singVarGetUninit name vars = if Map.member name vars
+                               then Left ("reading variable '" ++ name ++ "' before it was assigned")
+                               else Right vars
 
-
-
-
-
-
--- TODO ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-
-
-
-
-
-
-
-
-
-cmdGetUninitialized ctx (Repeat cmds cond) vars = do getUninitialized vars cmds; condGetUninitialized vars cond
-cmdGetUninitialized ctx (ForTo iter from to cmds) vars = let itName = iterName iter
-                                                       forVars = Map.insert itName (SingleVar itName) vars
-                                                   in  do itGetUninitialized vars iter
-                                                          valGetUninitialized vars from
-                                                          valGetUninitialized vars to
-                                                          getUninitialized forVars cmds
-cmdGetUninitialized ctx (ForDownTo iter from to cmds) vars = let itName = iterName iter
-                                                           forVars = Map.insert itName (SingleVar itName) vars
-                                                       in  do itGetUninitialized vars iter
-                                                              valGetUninitialized vars from
-                                                              valGetUninitialized vars to
-                                                              getUninitialized forVars cmds
-cmdGetUninitialized ctx (Read ident) vars = idGetUninitialized vars ident
-cmdGetUninitialized ctx (Write val) vars = valGetUninitialized vars val
+arrGetUninit :: String -> Variables -> Either String Variables
+arrGetUninit name vars = if Map.member name vars
+                           then Left ("reading from array '" ++ name ++ "' before any of its elements was assigned")
+                           else Right vars

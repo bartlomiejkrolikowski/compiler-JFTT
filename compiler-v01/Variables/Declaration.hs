@@ -12,8 +12,8 @@ import qualified Data.List as List
 --   - jesli nie to zwraca zadeklarowane zmienne globalne
 --   - jesli tak to zwraca informacje o bledzie dla uzytkownika
 -- ((>>=) dla Either nic nie zmienia dla konstruktora Left _)
-getVariables :: Program -> Either String Variables
-getVariables (Program decls _) = List.foldl' (\ varAcc decl -> varAcc >>= checkAndInsert decl) (Right Map.empty) decls
+getVariables :: Declarations -> Either String Variables
+getVariables decls = List.foldl' (\ varAcc decl -> varAcc >>= checkAndInsert decl) (Right Map.empty) decls
     where checkAndInsert decl@(SingleVar n) vars = checkRedeclaraiton decl vars
           checkAndInsert decl@(Array n b e) vars = if b <= e
                                                      then checkRedeclaraiton decl vars
@@ -26,7 +26,7 @@ getVariables (Program decls _) = List.foldl' (\ varAcc decl -> varAcc >>= checkA
 -- sprawdza czy kazda uzyta zmienna zostala zadeklarowana
 -- jesli nie ta zwraca informacje dla uzytkownika o rodzaju bledu
 getMisusedVars :: Variables -> Commands -> Either String ()
-getMisusedVars vars cmds = List.foldl' (\ errAcc cmd -> do errAcc; cmdGetMisusedVars vars cmd) Nothing cmds
+getMisusedVars vars cmds = List.foldl' (\ errAcc cmd -> do errAcc; cmdGetMisusedVars vars cmd) (Right ()) cmds
 -- do ... -- Either String to monada -- (do a; b) jest rownowazne (a >>= (\_ -> b)) -- definicja (>>=):
 --                                                                                         Left l >>= f = Left l
 --                                                                                         Right r >>= f = f r

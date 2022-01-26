@@ -1,6 +1,7 @@
 import Tokens
 import Grammar.Data
 import Grammar.Parse
+import Variables.Correctness
 import Translation.Code
 import Translation.Translation
 import System.IO
@@ -17,8 +18,6 @@ main = do
          saveOrError handleMachCode $ compile $ parse $ alexScanTokens contents
          hClose handleSource
          hClose handleMachCode
-
-checkCorrectness = undefined
 
 -- zwraca albo blad albo skompilowany program
 compile :: Program -> Either String Code
