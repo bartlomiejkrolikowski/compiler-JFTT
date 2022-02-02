@@ -99,7 +99,7 @@ command :: { Variables -> Int -> Bool -> Bool -> (Command, Variables, NotAssigne
                                                                                                             in  if assigned ind
                                                                                                                   then succAId
                                                                                                                   else if inIfinLoop -- jesli jestem w if, w petli to zmienna moze byc zainicjowana w innym warunku w poprzednim przebiegu
-                                                                                                                         then Set.insert (name ind) <\$> succAId
+                                                                                                                         then insertInLast (name ind) succAId
                                                                                                                          else error ("reading variable '" ++ name ind ++ "' before it was assigned")
                                                                                  assignId                -> successfulResult assignId }
       | IF condition THEN commands ELSE commands ENDIF             { \vars unusedAddr inLoop inIfinLoop ->
@@ -170,7 +170,7 @@ command :: { Variables -> Int -> Bool -> Bool -> (Command, Variables, NotAssigne
                                                                                  readId@(ArrVar _ ind) -> if assigned ind
                                                                                                             then successfulResult readId
                                                                                                             else if inIfinLoop -- jesli jestem w if, w petli to zmienna moze byc zainicjowana w innym warunku w poprzednim przebiegu
-                                                                                                                     then Set.insert (name ind) <\$> successfulResult readId
+                                                                                                                     then insertInLast (name ind) (successfulResult readId)
                                                                                                                      else error ("reading variable '" ++ name ind ++ "' before it was assigned")
                                                                                  readId                -> successfulResult readId }
       | WRITE value ';'                                            { \vars _ inLoop inIfinLoop -> let (val, nas) = ($2 vars inLoop inIfinLoop) in (Write val, vars, nas) }
@@ -271,4 +271,7 @@ identifier :: { Variables -> Identifier }
 {
 parseError :: [Token] -> a
 parseError _ = error "Syntax error"
+
+insertInLast :: (Ord a) => a -> (b,c,Set.Set a) -> (b,c,Set.Set a)
+insertInLast a (b, c, s) = (b, c, Set.insert a s)
 }
