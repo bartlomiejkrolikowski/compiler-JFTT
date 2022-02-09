@@ -4,6 +4,8 @@ module Variables.Assignment
 --, Uninitialized(..)
 ) where
 
+-- Bartlomiej Krolikowski
+
 import Variables.Data
 import Grammar.Data
 import qualified Data.Set as Set
@@ -33,6 +35,13 @@ cmdGetNotAssignable iters (Assign ident _) = if Set.notMember (idName ident) ite
 cmdGetNotAssignable iters (Read ident) = if Set.notMember (idName ident) iters
                                            then Right ()
                                            else Left ("cannot modify '" ++ (idName ident) ++ "' by READ because it is an iterator")
+cmdGetNotAssignable iters (IfElse _ cmdsT cmdsF) = do cmdsGetNotAssignable iters cmdsT
+                                                      cmdsGetNotAssignable iters cmdsF
+cmdGetNotAssignable iters (If _ cmdsT) = cmdsGetNotAssignable iters cmdsT
+cmdGetNotAssignable iters (While _ cmds) = cmdsGetNotAssignable iters cmds
+cmdGetNotAssignable iters (Repeat cmds _) = cmdsGetNotAssignable iters cmds
+cmdGetNotAssignable iters (ForTo iter _ _ cmds) = cmdsGetNotAssignable (Set.insert (iterName iter) iters) cmds
+cmdGetNotAssignable iters (ForDownTo iter _ _ cmds) = cmdsGetNotAssignable (Set.insert (iterName iter) iters) cmds
 cmdGetNotAssignable _ _ = Right ()
 
 -- inicjalizacja
@@ -73,8 +82,12 @@ cmdGetUninit (If cond cmdsT) vars = do condGetUninit cond vars -- nie sprawdzam 
 cmdGetUninit (While cond cmds) vars = do condGetUninit cond vars -- nie sprawdzam wewnatrz while
                                          return $ deleteVars cmds vars
 cmdGetUninit (Repeat cmds cond) vars = condGetUninit cond $ deleteVars cmds vars -- nie sprawdzam wewnatrz repeat
-cmdGetUninit (ForTo _ _ _ cmds) vars = return $ deleteVars cmds vars -- nie sprawdzam wewnatrz for
-cmdGetUninit (ForDownTo _ _ _ cmds) vars = return $ deleteVars cmds vars -- nie sprawdzam wewnatrz for
+cmdGetUninit (ForTo _ from to cmds) vars = do valGetUninit from vars
+                                              valGetUninit to vars
+                                              return $ deleteVars cmds vars -- nie sprawdzam wewnatrz for
+cmdGetUninit (ForDownTo _ from to cmds) vars = do valGetUninit from vars
+                                                  valGetUninit to vars
+                                                  return $ deleteVars cmds vars -- nie sprawdzam wewnatrz for
 cmdGetUninit (Read ident) vars = do idGetUninit ident vars
                                     return $ Map.delete (idName ident) vars
 cmdGetUninit (Write val) vars = valGetUninit val vars

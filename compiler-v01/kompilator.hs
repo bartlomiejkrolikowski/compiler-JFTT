@@ -2,6 +2,8 @@ import Tokens
 import Grammar.Data
 import Grammar.Parse
 import Variables.Correctness
+import Intermediate.Translation
+--
 import Translation.Code
 import Translation.Translation
 import System.IO
@@ -23,7 +25,7 @@ main = do
 compile :: Program -> Either String Code
 compile prog = do
                  checkCorrectness prog
-                 return $ fst $ translateProgram prog
+                 return $ fst $ translateProgram $ getInterProg prog
 
 -- wypisuje wiadomosc o bledzie lub zapisuje program do pliku
 saveOrError :: Handle -> Either String Code -> IO ()

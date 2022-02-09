@@ -23,3 +23,4 @@ wymagania:
  alex (w wersji co najmniej 3.2.4)
 
 w razie problemów wszystkie wymagane programy można zainstalować na systemie Ubuntu przez: apt install haskell-platform
+(jednak instalacja tylko odpowiedniej wersji ghc powinna wystarczyć)

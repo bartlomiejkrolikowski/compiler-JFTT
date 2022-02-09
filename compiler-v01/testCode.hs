@@ -1,6 +1,6 @@
 import Tokens
 import Grammar.Parse
-import Translation
+import Translation.Translation
 import System.IO
 import qualified Data.Map as Map
 

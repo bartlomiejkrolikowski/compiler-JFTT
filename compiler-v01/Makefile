@@ -9,11 +9,19 @@ Tokens.hs:
 Grammar/Parse.hs:
 	happy Grammar/Parse.y
 
-test: all_hs
+test: all_hs testCode testGrammar testInter
+
+testCode:
 	ghc --make testCode.hs
 
+testGrammar:
+	ghc --make testGrammar.hs
+
+testInter:
+	ghc --make testInter.hs
+
 clean:
-	rm -f *.o *.hi */*.o */*.hi testCode kompilator
+	rm -f *.o *.hi */*.o */*.hi testCode testGrammar testInter kompilator
 
 cleanGrammar:
 	rm -f Grammar/Parse.hs
